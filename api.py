@@ -2,7 +2,7 @@ import os
 import shutil
 import uuid
 from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from preprocess.extract_audio import extract_audio
 from preprocess.transcribe import transcribe_audio
@@ -27,6 +27,73 @@ STATUS = {}
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+@app.get("/docs-list/{video_id}/{dir_path:path}")
+def list_docs_directory(video_id: str, dir_path: str = ""):
+    base_dir = os.path.abspath(os.path.join(OUTPUT_DIR, video_id))
+    target_dir = os.path.abspath(os.path.join(base_dir, dir_path))
+    if not target_dir.startswith(base_dir):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not os.path.exists(target_dir):
+        raise HTTPException(status_code=404, detail="Directory not found")
+    def build_tree(path, rel_path=""):
+        items = []
+        for entry in sorted(os.listdir(path)):
+            full_path = os.path.join(path, entry)
+            entry_rel_path = os.path.join(rel_path, entry) if rel_path else entry
+            if os.path.isdir(full_path):
+                children = build_tree(full_path, entry_rel_path)
+                items.append({
+                    "name": entry,
+                    "path": entry_rel_path,
+                    "type": "folder",
+                    "children": children
+                })
+            elif entry.endswith(".md"):
+                items.append({
+                    "name": entry,
+                    "path": entry_rel_path,
+                    "type": "file"
+                })
+        return items
+    return JSONResponse(build_tree(target_dir, dir_path))
+
+@app.get("/docs/{video_id}/{file_path:path}")
+def get_markdown_file(video_id: str, file_path: str):
+    base_dir = os.path.abspath(os.path.join(OUTPUT_DIR, video_id))
+    target_file = os.path.abspath(os.path.join(base_dir, file_path))
+    if not target_file.startswith(base_dir):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not os.path.isfile(target_file) or not target_file.endswith(".md"):
+        raise HTTPException(status_code=404, detail="Markdown file not found")
+    return FileResponse(target_file, media_type="text/markdown")
+
+@app.get("/document/{video_id}/{file_path:path}")
+def get_markdown_file_compat(video_id: str, file_path: str):
+    base_dir = os.path.abspath(os.path.join(OUTPUT_DIR, video_id))
+    target_file = os.path.abspath(os.path.join(base_dir, file_path))
+    if not target_file.startswith(base_dir):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not os.path.isfile(target_file) or not target_file.endswith(".md"):
+        raise HTTPException(status_code=404, detail="Markdown file not found")
+    return FileResponse(target_file, media_type="text/markdown")
+
+@app.get("/download/{video_id}")
+def download_docs_zip(video_id: str):
+    import zipfile
+    from io import BytesIO
+    base_dir = os.path.abspath(os.path.join(OUTPUT_DIR, video_id))
+    if not os.path.exists(base_dir):
+        raise HTTPException(status_code=404, detail="Documentation folder not found")
+    mem_zip = BytesIO()
+    with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+        for root, dirs, files in os.walk(base_dir):
+            for file in files:
+                abs_path = os.path.join(root, file)
+                rel_path = os.path.relpath(abs_path, base_dir)
+                zf.write(abs_path, rel_path)
+    mem_zip.seek(0)
+    return FileResponse(mem_zip, filename=f"docs_{video_id}.zip", media_type="application/zip")
 
 def process_video(video_id: str, video_path: str):
     try:
