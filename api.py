@@ -6,7 +6,8 @@ from fastapi.responses import FileResponse
 from preprocess.extract_audio import extract_audio
 from preprocess.transcribe import transcribe_audio
 from preprocess.keyframes import extract_keyframes
-from agent.generate_doc import generate_markdown
+from preprocess.keyframe_analysis import summarize_keyframe, consolidate_user_journey
+from agent.generate_doc import generate_folder_structure, generate_markdown_skeletons, populate_markdown_files
 
 app = FastAPI()
 UPLOAD_DIR = "uploads"
@@ -25,15 +26,24 @@ def process_video(video_id: str, video_path: str):
         transcript = transcribe_audio(audio_path)
 
         STATUS[video_id] = "extracting_keyframes"
-        extract_keyframes(video_path, threshold=25)
+        keyframes = extract_keyframes(video_path)
 
-        STATUS[video_id] = "generating_documentation"
-        keyframe_text = "Screenshots from key parts of the demo have been extracted."
-        markdown = generate_markdown(transcript, keyframe_text)
+        STATUS[video_id] = "analyzing_keyframes"
+        keyframe_summaries = [summarize_keyframe(path) for path in keyframes]
 
-        doc_path = os.path.join(OUTPUT_DIR, f"{video_id}.md")
-        with open(doc_path, "w") as f:
-            f.write(markdown)
+        STATUS[video_id] = "consolidating_user_journey"
+        user_journey_flow = consolidate_user_journey(keyframe_summaries)
+
+        STATUS[video_id] = "generating_documentation_folder_structure"
+        folder_structure = generate_folder_structure(transcript, user_journey_flow)
+
+        STATUS[video_id] = "creating_markdown_skeletons"
+        doc_base = os.path.join(OUTPUT_DIR, video_id)
+        generate_markdown_skeletons(folder_structure, user_journey_flow, base_path=doc_base)
+
+        STATUS[video_id] = "populating_documentation_files"
+        populate_markdown_files(folder_structure, transcript, user_journey_flow, base_path=doc_base)
+
         STATUS[video_id] = "done"
     except Exception as e:
         STATUS[video_id] = f"error: {str(e)}"
