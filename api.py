@@ -3,6 +3,7 @@ import shutil
 import uuid
 from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from preprocess.extract_audio import extract_audio
 from preprocess.transcribe import transcribe_audio
 from preprocess.keyframes import extract_keyframes
@@ -10,8 +11,18 @@ from preprocess.keyframe_analysis import summarize_keyframe, consolidate_user_jo
 from agent.generate_doc import generate_folder_structure, generate_markdown_skeletons, populate_markdown_files
 
 app = FastAPI()
+
+# Allow CORS for local frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8080"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
+
 UPLOAD_DIR = "uploads"
-OUTPUT_DIR = "output"
+OUTPUT_DIR = "output/docs"
 STATUS = {}
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -29,7 +40,12 @@ def process_video(video_id: str, video_path: str):
         keyframes = extract_keyframes(video_path)
 
         STATUS[video_id] = "analyzing_keyframes"
-        keyframe_summaries = [summarize_keyframe(path) for path in keyframes]
+        keyframe_summaries = []
+        prev_context = None
+        for kf in keyframes:
+            summary = summarize_keyframe(kf['path'], kf['timestamp'], previous_context=prev_context)
+            keyframe_summaries.append(summary)
+            prev_context = '\n'.join(summary.splitlines()[:2])
 
         STATUS[video_id] = "consolidating_user_journey"
         user_journey_flow = consolidate_user_journey(keyframe_summaries)
