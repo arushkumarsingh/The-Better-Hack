@@ -8,3 +8,4 @@ uploads/
 uploads/*
 .venv/*
 .env
+*.pkl

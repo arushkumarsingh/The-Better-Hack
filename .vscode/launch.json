@@ -1,0 +1,86 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run Full Pipeline",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/app.py",
+            "args": [
+                "${input:videoPath}"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Run Specific Steps",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/app.py",
+            "args": [
+                "${input:videoPath}",
+                "--steps",
+                "${input:steps}"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Force Regenerate Steps",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/app.py",
+            "args": [
+                "${input:videoPath}",
+                "--steps",
+                "${input:steps}",
+                "--force"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Custom Output Directory",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/app.py",
+            "args": [
+                "${input:videoPath}",
+                "--output",
+                "${input:outputPath}"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        }
+    ],
+    "inputs": [
+        {
+            "id": "videoPath",
+            "type": "promptString",
+            "description": "Path to the video file",
+            "default": ".\\data\\demo-trim.mp4 "
+        },
+        {
+            "id": "steps",
+            "type": "pickString",
+            "description": "Steps to run",
+            "options": [
+                "audio",
+                "transcript",
+                "keyframes",
+                "summaries",
+                "journey",
+                "docs",
+                "presentation",
+                "all"
+            ],
+            "default": "all"
+        },
+        {
+            "id": "outputPath",
+            "type": "promptString",
+            "description": "Output directory path",
+            "default": "custom_output"
+        }
+    ]
+}
