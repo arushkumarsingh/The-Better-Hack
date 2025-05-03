@@ -11,7 +11,7 @@ def main(video_path):
     transcript = transcribe_audio(audio_path)
 
     print("Extracting keyframes...")
-    extract_keyframes(video_path)
+    extract_keyframes(video_path, threshold=25)
 
     print("Generating documentation...")
     keyframe_text = "Screenshots from key parts of the demo have been extracted."

@@ -2,3 +2,5 @@ openai
 openai-whisper
 opencv-python
 ffmpeg-python
+fastapi
+uvicorn
