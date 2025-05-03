@@ -30,6 +30,25 @@ REALTIME_SESSIONS = {}
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+from fastapi.responses import JSONResponse
+
+@app.get("/fetch_api/docs-folders")
+def list_docs_folders():
+    docs_path = os.path.abspath(OUTPUT_DIR)
+    folders = []
+    if os.path.exists(docs_path):
+        for name in os.listdir(docs_path):
+            folder_path = os.path.join(docs_path, name)
+            if os.path.isdir(folder_path):
+                folders.append({
+                    "id": name,
+                    "title": name.replace("_", " ").title(),
+                    "preview": "/placeholder.svg",
+                    "status": "completed",
+                    "date": ""
+                })
+    return JSONResponse(content=folders)
+
 @app.get("/docs-list/{video_id}/{dir_path:path}")
 def list_docs_directory(video_id: str, dir_path: str = ""):
     base_dir = os.path.abspath(os.path.join(OUTPUT_DIR, video_id))
