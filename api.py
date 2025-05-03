@@ -9,6 +9,7 @@ from preprocess.transcribe import transcribe_audio
 from preprocess.keyframes import extract_keyframes
 from preprocess.keyframe_analysis import summarize_keyframe, consolidate_user_journey
 from agent.generate_doc import generate_folder_structure, generate_markdown_skeletons, populate_markdown_files
+from agent.generate_persona_doc import extract_personas_usecases, select_lucrative_features
 
 app = FastAPI()
 
@@ -156,6 +157,63 @@ def download_doc(video_id: str):
     if not os.path.exists(doc_path):
         raise HTTPException(status_code=404, detail="Documentation not found")
     return FileResponse(doc_path, filename=f"{video_id}.md")
+
+@app.post("/persona-analysis/{video_id}")
+def persona_analysis(video_id: str, persona: str = None):
+    """
+    Analyze applications, use cases, and personas for a given video. Optionally, if a persona is provided, select the most lucrative features for that persona.
+    """
+    # Load transcript
+    audio_files = [f for f in os.listdir(UPLOAD_DIR) if f.startswith(video_id+"_")]
+    if not audio_files:
+        raise HTTPException(status_code=404, detail="Video not found")
+    video_path = os.path.join(UPLOAD_DIR, audio_files[0])
+    audio_path = None
+    for ext in [".wav", ".mp3", ".m4a"]:
+        candidate = os.path.splitext(video_path)[0] + ext
+        if os.path.exists(candidate):
+            audio_path = candidate
+            break
+    if not audio_path:
+        audio_path = None
+    # Use transcript from process_video output if available
+    transcript_file = os.path.join(OUTPUT_DIR, video_id, "transcript.txt")
+    if os.path.exists(transcript_file):
+        with open(transcript_file) as f:
+            transcript = f.read()
+    else:
+        from preprocess.transcribe import transcribe_audio
+        transcript = transcribe_audio(audio_path) if audio_path else ""
+    # Load keyframe summaries
+    keyframes_json = os.path.join(OUTPUT_DIR, video_id, "keyframe_summaries.json")
+    if os.path.exists(keyframes_json):
+        with open(keyframes_json) as f:
+            keyframe_summaries = f.read()
+    else:
+        from preprocess.keyframes import extract_keyframes
+        from preprocess.keyframe_analysis import summarize_keyframe
+        keyframes = extract_keyframes(video_path)
+        keyframe_summaries_list = []
+        prev_context = None
+        for kf in keyframes:
+            summary = summarize_keyframe(kf['path'], kf['timestamp'], previous_context=prev_context)
+            keyframe_summaries_list.append(summary)
+            prev_context = '\n'.join(summary.splitlines()[:2])
+        keyframe_summaries = "\n".join(keyframe_summaries_list)
+    # Run persona/use-case extraction
+    result = extract_personas_usecases(transcript, keyframe_summaries)
+    # If a persona is specified, select top features for that persona
+    if persona:
+        persona_obj = None
+        for p in result.get("personas", []):
+            if p["name"].lower() == persona.lower():
+                persona_obj = p
+                break
+        if not persona_obj:
+            return {"error": f"Persona '{persona}' not found. Available: {[p['name'] for p in result.get('personas',[])]}"}
+        top_features = select_lucrative_features(transcript, keyframe_summaries, persona_obj)
+        result["top_features_for_persona"] = top_features
+    return result
 
 @app.get("/status/{video_id}")
 def get_status(video_id: str):
