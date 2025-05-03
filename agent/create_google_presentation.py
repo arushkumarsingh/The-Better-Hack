@@ -3,6 +3,8 @@ from google.oauth2 import service_account
 import json
 from typing import List, Dict
 import os
+import uuid
+
 
 def create_google_feature_presentation(keyframe_summaries: List[str],
                                      user_journey: str,
@@ -13,7 +15,24 @@ def create_google_feature_presentation(keyframe_summaries: List[str],
     Returns the presentation ID
     """
     SCOPES = ['https://www.googleapis.com/auth/presentations', 'https://www.googleapis.com/auth/drive']
-    SERVICE_ACCOUNT_FILE = '.\\the-better-hack-7337ffd8502d.json'  # Update this path
+    SERVICE_ACCOUNT_FILE = '.\\the-better-hack-7337ffd8502d.json'
+
+    # Define theme colors (converting from 0-255 to 0.0-1.0 range)
+    THEME_COLOR_PRIMARY = {
+        'red': 0.0,
+        'green': 112/255,
+        'blue': 192/255
+    }     # Blue
+    THEME_COLOR_SECONDARY = {
+        'red': 1.0,
+        'green': 1.0,
+        'blue': 1.0
+    } # White
+    THEME_COLOR_ACCENT = {
+        'red': 240/255,
+        'green': 240/255,
+        'blue': 240/255
+    }    # Light gray
 
     # Authenticate and create the Slides service
     creds = service_account.Credentials.from_service_account_file(
@@ -31,10 +50,11 @@ def create_google_feature_presentation(keyframe_summaries: List[str],
 
     # Prepare requests for batch update
 
-    # Create title slide
+    # Create title slide with unique ID
+    title_slide_id = f'slide_{uuid.uuid4().hex[:8]}'  # Using UUID for unique ID
     slide_request = [{
         'createSlide': {
-            'objectId': 'titleSlide',
+            'objectId': title_slide_id,
             'insertionIndex': '0',
             'slideLayoutReference': {
                 'predefinedLayout': 'TITLE'
@@ -57,26 +77,117 @@ def create_google_feature_presentation(keyframe_summaries: List[str],
     title_id = None
     for element in first_slide.get('pageElements', []):
         if element.get('shape', {}).get('placeholder', {}).get('type') == 'TITLE':
-            title_id = element.get('objectId')
+            title_id = f"{element.get('objectId')}_{uuid.uuid4().hex[:8]}"
             break
 
     if title_id:
-        # Now insert the text into the title placeholder
+        # Update subtitle and background shape IDs to be unique
+        subtitle_id = f'subtitle_{title_slide_id}'
+        background_id = f'background_{title_slide_id}'
+        
+        # Update title slide styling
         text_request = [{
             'insertText': {
                 'objectId': title_id,
                 'insertionIndex': 0,
                 'text': output_path
             }
+        },
+        {
+            'updateTextStyle': {
+                'objectId': title_id,
+                'style': {
+                    'fontSize': {'magnitude': 44, 'unit': 'PT'},
+                    'foregroundColor': {'opaqueColor': {'rgbColor': THEME_COLOR_PRIMARY}},
+                    'bold': True
+                },
+                'fields': 'fontSize,foregroundColor,bold'
+            }
         }]
-        body = {'requests': text_request}
+
+        # Update subtitle request with unique ID
+        subtitle_request = [{
+            'createShape': {
+                'objectId': subtitle_id,
+                'shapeType': 'TEXT_BOX',
+                'elementProperties': {
+                    'pageObjectId': title_slide_id,
+                    'size': {
+                        'width': {'magnitude': 400, 'unit': 'PT'},
+                        'height': {'magnitude': 50, 'unit': 'PT'}
+                    },
+                    'transform': {
+                        'scaleX': 1,
+                        'scaleY': 1,
+                        'translateX': 50,
+                        'translateY': 100,
+                        'unit': 'PT'
+                    }
+                }
+            }
+        },
+        {
+            'insertText': {
+                'objectId': subtitle_id,
+                'text': "Generated from User Journey Analysis"
+            }
+        },
+        {
+            'updateTextStyle': {
+                'objectId': subtitle_id,
+                'style': {
+                    'fontSize': {'magnitude': 24, 'unit': 'PT'},
+                    'italic': True
+                },
+                'fields': 'fontSize,italic'
+            }
+        }]
+
+        # Update background request with unique ID
+        background_request = [{
+            'createShape': {
+                'objectId': background_id,
+                'shapeType': 'RECTANGLE',
+                'elementProperties': {
+                    'pageObjectId': title_slide_id,
+                    'size': {
+                        'width': {'magnitude': 720, 'unit': 'PT'},
+                        'height': {'magnitude': 117, 'unit': 'PT'}
+                    },
+                    'transform': {
+                        'scaleX': 1,
+                        'scaleY': 1,
+                        'translateX': 0,
+                        'translateY': 288,
+                        'unit': 'PT'
+                    }
+                }
+            }
+        },
+        {
+            'updateShapeProperties': {
+                'objectId': background_id,
+                'shapeProperties': {
+                    'shapeBackgroundFill': {
+                        'solidFill': {
+                            'color': {'rgbColor': THEME_COLOR_PRIMARY}
+                        }
+                    },
+                    'outline': {'propertyState': 'NOT_RENDERED'}
+                },
+                'fields': 'shapeBackgroundFill.solidFill.color,outline'
+            }
+        }]
+
+        # Combine all requests for title slide
+        body = {'requests': text_request + subtitle_request + background_request}
         service.presentations().batchUpdate(
             presentationId=presentation_id, body=body).execute()
 
     # Create feature slides
     requests = []
     for i, (feature, image_path) in enumerate(zip(features[:5], image_paths[:5])):
-        slide_id = f'featureSlide_{i}'
+        slide_id = f'featureSlide_{i}_{uuid.uuid4().hex[:8]}'
         requests.extend([
             {
                 'createSlide': {
@@ -113,14 +224,112 @@ def create_google_feature_presentation(keyframe_summaries: List[str],
                     'text': feature['title']
                 }
             }
-            # Add more requests for description and formatting
         ])
 
-        # If image exists, create request to upload it
-        if os.path.exists(image_path):
-            # Upload image and create image request
-            # Note: Image upload requires different approach with Google Slides API
-            pass
+        # Create feature number circle
+        feature_number_requests = [{
+            'createShape': {
+                'objectId': f'featureNum_{i}',
+                'shapeType': 'ELLIPSE',
+                'elementProperties': {
+                    'pageObjectId': slide_id,
+                    'size': {
+                        'width': {'magnitude': 72, 'unit': 'PT'},
+                        'height': {'magnitude': 72, 'unit': 'PT'}
+                    },
+                    'transform': {
+                        'scaleX': 1,
+                        'scaleY': 1,
+                        'translateX': 36,
+                        'translateY': 36,
+                        'unit': 'PT'
+                    }
+                }
+            }
+        },
+        {
+            'updateShapeProperties': {
+                'objectId': f'featureNum_{i}',
+                'shapeProperties': {
+                    'shapeBackgroundFill': {
+                        'solidFill': {
+                            'color': {'rgbColor': THEME_COLOR_PRIMARY}
+                        }
+                    },
+                    'outline': {'propertyState': 'NOT_RENDERED'}
+                },
+                'fields': 'shapeBackgroundFill.solidFill.color,outline'
+            }
+        },
+        {
+            'insertText': {
+                'objectId': f'featureNum_{i}',
+                'text': str(i + 1)
+            }
+        },
+        {
+            'updateTextStyle': {
+                'objectId': f'featureNum_{i}',
+                'style': {
+                    'fontSize': {'magnitude': 24, 'unit': 'PT'},
+                    'foregroundColor': {'opaqueColor': {'rgbColor': THEME_COLOR_SECONDARY}},
+                    'bold': True
+                },
+                'fields': 'fontSize,foregroundColor,bold'
+            }
+        }]
+
+        # Update existing title styling
+        title_requests = [{
+            'updateTextStyle': {
+                'objectId': f'title_{i}',
+                'style': {
+                    'fontSize': {'magnitude': 32, 'unit': 'PT'},
+                    'foregroundColor': {'opaqueColor': {'rgbColor': THEME_COLOR_PRIMARY}},
+                    'bold': True
+                },
+                'fields': 'fontSize,foregroundColor,bold'
+            }
+        }]
+
+        # Add description text box
+        description_requests = [{
+            'createShape': {
+                'objectId': f'description_{i}',
+                'shapeType': 'TEXT_BOX',
+                'elementProperties': {
+                    'pageObjectId': slide_id,
+                    'size': {
+                        'width': {'magnitude': 252, 'unit': 'PT'},
+                        'height': {'magnitude': 216, 'unit': 'PT'}
+                    },
+                    'transform': {
+                        'scaleX': 1,
+                        'scaleY': 1,
+                        'translateX': 396,
+                        'translateY': 130,
+                        'unit': 'PT'
+                    }
+                }
+            }
+        },
+        {
+            'insertText': {
+                'objectId': f'description_{i}',
+                'text': feature['description']
+            }
+        },
+        {
+            'updateTextStyle': {
+                'objectId': f'description_{i}',
+                'style': {
+                    'fontSize': {'magnitude': 16, 'unit': 'PT'}
+                },
+                'fields': 'fontSize'
+            }
+        }]
+
+        requests.extend(feature_number_requests + title_requests + description_requests)
 
     # Execute the requests
     body = {'requests': requests}
