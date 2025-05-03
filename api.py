@@ -25,6 +25,7 @@ app.add_middleware(
 UPLOAD_DIR = "uploads"
 OUTPUT_DIR = "output/docs"
 STATUS = {}
+REALTIME_SESSIONS = {}
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -157,6 +158,53 @@ def download_doc(video_id: str):
     if not os.path.exists(doc_path):
         raise HTTPException(status_code=404, detail="Documentation not found")
     return FileResponse(doc_path, filename=f"{video_id}.md")
+
+from fastapi import Request
+from typing import Dict
+
+@app.post("/realtime-upload/start")
+def realtime_upload_start():
+    """
+    Starts a new real-time upload session. Returns a session_id.
+    """
+    import uuid
+    session_id = str(uuid.uuid4())
+    video_path = os.path.join(UPLOAD_DIR, f"realtime_{session_id}.webm")
+    f = open(video_path, "wb")
+    REALTIME_SESSIONS[session_id] = {"file": f, "video_path": video_path}
+    STATUS[session_id] = "recording"
+    return {"session_id": session_id}
+
+@app.post("/realtime-upload/chunk/{session_id}")
+async def realtime_upload_chunk(session_id: str, request: Request):
+    """
+    Receives a video chunk and appends it to the session file.
+    """
+    if session_id not in REALTIME_SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    f = REALTIME_SESSIONS[session_id]["file"]
+    chunk = await request.body()
+    f.write(chunk)
+    f.flush()
+    return {"status": "chunk received"}
+
+@app.post("/realtime-upload/finish/{session_id}")
+def realtime_upload_finish(session_id: str):
+    """
+    Finishes the real-time upload, closes the file, and starts processing.
+    """
+    if session_id not in REALTIME_SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+    f = REALTIME_SESSIONS[session_id]["file"]
+    video_path = REALTIME_SESSIONS[session_id]["video_path"]
+    f.close()
+    del REALTIME_SESSIONS[session_id]
+    # Start normal processing in background
+    from fastapi import BackgroundTasks
+    background_tasks = BackgroundTasks()
+    background_tasks.add_task(process_video, session_id, video_path)
+    STATUS[session_id] = "processing"
+    return {"status": "processing started", "video_id": session_id}
 
 @app.post("/persona-analysis/{video_id}")
 def persona_analysis(video_id: str, persona: str = None):
