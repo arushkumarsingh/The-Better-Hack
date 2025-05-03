@@ -210,12 +210,25 @@ def create_google_feature_presentation(keyframe_summaries: List[str],
                         },
                         'transform': {
                             'scaleX': 1,
-                            'scaleY': 1,
-                            'translateX': 50,
-                            'translateY': 30,
+                            'scaleY': 1.1,
+                            'translateX': 120,
+                            'translateY': 40,
                             'unit': 'PT'
                         }
                     }
+                }
+            },
+            {
+                'updateShapeProperties': {
+                    'objectId': f'title_{i}',
+                    'shapeProperties': {
+                        'shapeBackgroundFill': {
+                            'solidFill': {
+                                'color': {'rgbColor': THEME_COLOR_ACCENT}
+                            }
+                        }
+                    },
+                    'fields': 'shapeBackgroundFill.solidFill.color'
                 }
             },
             {
