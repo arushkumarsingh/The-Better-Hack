@@ -146,7 +146,7 @@ def process_documentation(transcript, user_journey_flow, base_path="output/docs"
 def create_presentation(keyframe_summaries, user_journey_flow, keyframe_paths, output_path="output/presentation", force=False):
     """Create a presentation from keyframes and user journey"""
     print("Generating feature presentation...")
-    presentation_path = create_feature_presentation(
+    presentation_path = create_google_feature_presentation(
         keyframe_summaries,
         user_journey_flow,
         keyframe_paths,

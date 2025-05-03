@@ -4,6 +4,7 @@ import json
 from typing import List, Dict
 import os
 import uuid
+from googleapiclient.http import MediaFileUpload
 
 
 def create_google_feature_presentation(keyframe_summaries: List[str],
@@ -14,7 +15,9 @@ def create_google_feature_presentation(keyframe_summaries: List[str],
     Creates a professional Google Slides presentation highlighting the main features
     Returns the presentation ID
     """
-    SCOPES = ['https://www.googleapis.com/auth/presentations', 'https://www.googleapis.com/auth/drive']
+    SCOPES = ['https://www.googleapis.com/auth/presentations', 
+              'https://www.googleapis.com/auth/drive',
+              'https://www.googleapis.com/auth/drive.file']
     SERVICE_ACCOUNT_FILE = '.\\the-better-hack-7337ffd8502d.json'
 
     # Define theme colors (converting from 0-255 to 0.0-1.0 range)
@@ -34,19 +37,48 @@ def create_google_feature_presentation(keyframe_summaries: List[str],
         'blue': 240/255
     }    # Light gray
 
-    # Authenticate and create the Slides service
+    # Authenticate and create the Slides and Drive services
     creds = service_account.Credentials.from_service_account_file(
         SERVICE_ACCOUNT_FILE, scopes=SCOPES)
-    service = build('slides', 'v1', credentials=creds)
+    slides_service = build('slides', 'v1', credentials=creds)
+    drive_service = build('drive', 'v3', credentials=creds)
 
     # Create a new presentation
-    presentation = service.presentations().create(
+    presentation = slides_service.presentations().create(
         body={'title': output_path}
     ).execute()
     presentation_id = '1yUDrrmE_9fw3MGfjnMChnra-Z6qvncM5c9w257DvWfg'
 
     # Extract features
     features = _extract_main_features(user_journey)
+
+    # Upload images to Drive and get their URLs
+    image_urls = []
+    for image_path in image_paths:
+        if os.path.exists(image_path):
+            file_metadata = {
+                'name': os.path.basename(image_path),
+                'mimeType': 'image/jpeg'
+            }
+            media = MediaFileUpload(image_path, mimetype='image/jpeg', resumable=True)
+            file = drive_service.files().create(
+                body=file_metadata,
+                media_body=media,
+                fields='id'
+            ).execute()
+            
+            # Make the file publicly accessible
+            drive_service.permissions().create(
+                fileId=file.get('id'),
+                body={'type': 'anyone', 'role': 'reader'},
+                fields='id'
+            ).execute()
+            
+            # Get the web content link
+            image_url = f"https://drive.google.com/uc?id={file.get('id')}"
+            image_urls.append(image_url)
+        else:
+            image_urls.append(None)
 
     # Prepare requests for batch update
 
@@ -64,11 +96,11 @@ def create_google_feature_presentation(keyframe_summaries: List[str],
 
     # First create the slide
     body = {'requests': slide_request}
-    service.presentations().batchUpdate(
+    slides_service.presentations().batchUpdate(
         presentationId=presentation_id, body=body).execute()
 
     # Get the slide details to find the title placeholder ID
-    slide = service.presentations().get(
+    slide = slides_service.presentations().get(
         presentationId=presentation_id
     ).execute()
 
@@ -181,12 +213,12 @@ def create_google_feature_presentation(keyframe_summaries: List[str],
 
         # Combine all requests for title slide
         body = {'requests': text_request + subtitle_request + background_request}
-        service.presentations().batchUpdate(
+        slides_service.presentations().batchUpdate(
             presentationId=presentation_id, body=body).execute()
 
     # Create feature slides
     requests = []
-    for i, (feature, image_path) in enumerate(zip(features[:5], image_paths[:5])):
+    for i, (feature, image_url) in enumerate(zip(features[:5], image_urls[:5])):
         slide_id = f'featureSlide_{i}_{uuid.uuid4().hex[:8]}'
         requests.extend([
             {
@@ -344,9 +376,33 @@ def create_google_feature_presentation(keyframe_summaries: List[str],
 
         requests.extend(feature_number_requests + title_requests + description_requests)
 
+        # Add image if it exists and we have a valid URL
+        if image_url:
+            image_requests = [{
+                'createImage': {
+                    'objectId': f'image_{i}',
+                    'url': image_url,
+                    'elementProperties': {
+                        'pageObjectId': slide_id,
+                        'size': {
+                            'width': {'magnitude': 288, 'unit': 'PT'},  # 4 inches
+                            'height': {'magnitude': 162, 'unit': 'PT'}  # 2.25 inches (16:9 aspect ratio)
+                        },
+                        'transform': {
+                            'scaleX': 1,
+                            'scaleY': 1,
+                            'translateX': 72,  # 1 inch from left
+                            'translateY': 140,  # 3 inches from top
+                            'unit': 'PT'
+                        }
+                    }
+                }
+            }]
+            requests.extend(image_requests)
+
     # Execute the requests
     body = {'requests': requests}
-    service.presentations().batchUpdate(
+    slides_service.presentations().batchUpdate(
         presentationId=presentation_id, body=body).execute()
 
     return presentation_id
@@ -380,4 +436,12 @@ def _extract_main_features(user_journey: str) -> List[Dict]:
     
     # Parse the JSON string into a Python dictionary
     features = json.loads(response.choices[0].message.content)
-    return features['features']
+    
+    # Ensure we have a list of features
+    if isinstance(features, dict) and 'features' in features:
+        return features['features']
+    elif isinstance(features, list):
+        return features
+    else:
+        # If the response is not in the expected format, create a default structure
+        return [{'title': 'Feature', 'description': 'Description'} for _ in range(5)]
