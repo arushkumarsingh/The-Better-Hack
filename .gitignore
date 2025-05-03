@@ -6,3 +6,5 @@ output/*
 *.wav
 uploads/
 uploads/*
+.venv/*
+.env
