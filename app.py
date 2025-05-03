@@ -3,6 +3,7 @@ from preprocess.transcribe import transcribe_audio
 from preprocess.keyframes import extract_keyframes
 from preprocess.keyframe_analysis import summarize_keyframe, consolidate_user_journey
 from agent.generate_doc import generate_folder_structure, generate_markdown_skeletons, populate_markdown_files
+from agent.create_presentation import create_feature_presentation
 from tqdm import tqdm
 
 def main(video_path):
@@ -35,6 +36,16 @@ def main(video_path):
 
     print("Populating documentation files...")
     populate_markdown_files(folder_structure, transcript, user_journey_flow, base_path="output/docs")
+
+    print("Generating feature presentation...")
+    presentation_path = create_feature_presentation(
+        keyframe_summaries,
+        user_journey_flow,
+        [kf['path'] for kf in keyframes],
+        output_path="output/presentation"
+    )
+    
+    print(f"Presentation saved to {presentation_path}")
 
     print("Documentation saved to output/docs/")
 
