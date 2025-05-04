@@ -104,7 +104,7 @@ def process_keyframe_summaries(keyframes, force=False):
     save_to_cache(keyframe_summaries, cache_path)
     return keyframe_summaries
 
-def process_user_journey(keyframe_summaries, force=False):
+def process_user_journey(keyframe_summaries, force=False, language=None):
     """Consolidate keyframe summaries into a user journey"""
     cache_path = get_cache_path("user_journey", str(len(keyframe_summaries)))
     
@@ -136,9 +136,9 @@ def process_documentation(transcript, user_journey_flow, base_path="output/docs"
         save_to_cache(folder_structure, cache_path)
     
     print("Creating markdown skeletons...")
-    generate_markdown_skeletons(folder_structure, user_journey_flow, base_path=base_path)
+    generate_markdown_skeletons(folder_structure, user_journey_flow, base_path=base_path, language=language)
     
-    print("Populating documentation files...")
+    print("Populating markdown files...")
     populate_markdown_files(folder_structure, transcript, user_journey_flow, base_path=base_path, language=language)
     
     return base_path
