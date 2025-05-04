@@ -50,6 +50,25 @@ Adaptidemo is a full-stack application designed to automate the creation of user
 4. **Access the app:**
    Open your browser and go to [http://localhost:3000](http://localhost:3000)
 
+## ⚡ Shortcuts: build.sh and run.sh
+
+For convenience, you can use the provided shell scripts to build and run the entire application with a single command.
+
+- **build.sh** – Installs all backend and frontend dependencies.
+- **run.sh** – Starts both the backend (API) and frontend (UI) servers.
+
+### Usage
+
+```bash
+# To install all required dependencies (backend + frontend)
+./build.sh
+
+# To start both backend and frontend servers
+./run.sh
+```
+
+---
+
 ## 📝 Usage
 - Click **Screen Record** to capture a new UI walkthrough, or upload an existing video/image.
 - Select your target output (User Guide or Customer Deck) and persona.
