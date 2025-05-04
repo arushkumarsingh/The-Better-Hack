@@ -57,12 +57,16 @@ def should_localize(request: Request):
     openai.api_key = api_key
 
     system_message = (
-        "You are an expert assistant for a documentation and deck generation tool. "
-        "Given a user prompt and persona, return a JSON object with: "
-        "localize (true if any language other than English is requested), "
-        "target_language (if any), personalize (true if persona is selected), and persona (if any). "
-        "If no localization or personalization is needed, set those fields to false/null. "
-        "Respond only with valid JSON."
+        "You are an expert assistant analyzing user requests for a documentation and deck generation tool. "
+        "Your task is to determine if localization (translation) or personalization (based on persona) is required based on the provided user prompt and persona information. "
+        "Return ONLY a valid JSON object with the following keys:\n"
+        "- localize: boolean (true if the prompt explicitly or implicitly requests a language other than English)\n"
+        "- target_language: string (the requested language name if localize is true, otherwise null)\n"
+        "- personalize: boolean (true if a non-empty persona is provided)\n"
+        "- persona: string (the provided persona if personalize is true, otherwise null)\n\n"
+        "Example Input:\nPrompt: Create a guide in Spanish\nPersona: Developer\n"
+        "Example Output:\n"
+        '{\n  "localize": true,\n  "target_language": "Spanish",\n  "personalize": true,\n  "persona": "Developer"\n}'
     )
     user_message = (
         f"Prompt: {prompt}\nPersona: {persona}\n"
@@ -298,12 +302,16 @@ async def process_endpoint(video_id: str, background_tasks: BackgroundTasks, req
             if api_key:
                 openai.api_key = api_key
                 system_message = (
-                    "You are an expert assistant for a documentation and deck generation tool. "
-                    "Given a user prompt and persona, return a JSON object with: "
-                    "localize (true if any language other than English is requested), "
-                    "target_language (if any), personalize (true if persona is selected), and persona (if any). "
-                    "If no localization or personalization is needed, set those fields to false/null. "
-                    "Respond only with valid JSON."
+                    "You are an expert assistant analyzing user requests for a documentation and deck generation tool. "
+                    "Your task is to determine if localization (translation) or personalization (based on persona) is required based on the provided user prompt and persona information. "
+                    "Return ONLY a valid JSON object with the following keys:\n"
+                    "- localize: boolean (true if the prompt explicitly or implicitly requests a language other than English)\n"
+                    "- target_language: string (the requested language name if localize is true, otherwise null)\n"
+                    "- personalize: boolean (true if a non-empty persona is provided)\n"
+                    "- persona: string (the provided persona if personalize is true, otherwise null)\n\n"
+                    "Example Input:\nPrompt: Create a guide in Spanish\nPersona: Developer\n"
+                    "Example Output:\n"
+                    '{\n  "localize": true,\n  "target_language": "Spanish",\n  "personalize": true,\n  "persona": "Developer"\n}'
                 )
                 user_message = f"Prompt: {prompt}\nPersona: {persona}\n"
                 response = openai.ChatCompletion.create(

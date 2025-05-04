@@ -604,30 +604,71 @@ def _extract_main_features(user_journey: str) -> List[Dict]:
     """
     # Use OpenAI to extract main features
     import openai
-    
-    prompt = """
-    Given this user journey, identify the top 5 main features of the application.
-    For each feature provide:
-    1. A short title (2-4 words)
-    2. A brief description (2-3 sentences)
-    Format as JSON list of objects with 'title' and 'description' fields.
-    
-    User Journey:
-    """
-    
+
+    system_prompt = "You are a feature analyst expert at summarizing key application capabilities from user journey descriptions."
+    user_prompt = f"""
+Analyze the provided User Journey description and identify the top 5 main features or capabilities demonstrated.
+
+**Instructions:**
+1.  Identify the 5 most prominent and distinct features shown in the journey.
+2.  For each feature, provide:
+    *   `title`: A concise title (2-4 words).
+    *   `description`: A brief description (1-3 sentences) explaining the feature's purpose or benefit.
+
+**Output Format:**
+Return ONLY a valid JSON object containing a single key "features" whose value is a list of the 5 feature objects. Example:
+```json
+{{
+  "features": [
+    {{
+      "title": "Feature Title 1",
+      "description": "Description of feature 1."
+    }},
+    {{
+      "title": "Feature Title 2",
+      "description": "Description of feature 2."
+    }},
+    ... (up to 5 features)
+  ]
+}}
+```
+
+**Input Data:**
+
+### User Journey:
+{user_journey}
+
+---
+**Top 5 Features (JSON object only):**
+"""
+
     response = openai.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {"role": "user", 
-             "content": prompt + user_journey}
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
         ],
-        response_format={ "type": "json_object" }
+        response_format={ "type": "json_object" },
+        max_tokens=500 # Adjusted max_tokens
     )
-    
+
     # Parse the JSON string into a Python dictionary
-    features = json.loads(response.choices[0].message.content)
-    
-    # Ensure we have a list of features
+    try:
+        content = json.loads(response.choices[0].message.content)
+        # Validate structure slightly
+        if isinstance(content, dict) and 'features' in content and isinstance(content['features'], list):
+             features = content['features']
+        elif isinstance(content, list): # Handle case where it might return just the list
+             features = content
+        else:
+             print("[WARN] Unexpected JSON structure received from feature extraction in Google Slides.")
+             features = [{'title': 'Feature', 'description': 'Description'} for _ in range(5)] # Default on unexpected structure
+    except json.JSONDecodeError as e:
+        print(f"[ERROR] Failed to decode JSON from feature extraction in Google Slides: {e}")
+        print("Raw response:", response.choices[0].message.content)
+        features = [{'title': 'Feature', 'description': 'Description'} for _ in range(5)] # Default on error
+
+    # Ensure we have a list of features (redundant check after try/except but safe)
     if isinstance(features, dict) and 'features' in features:
         return features['features']
     elif isinstance(features, list):

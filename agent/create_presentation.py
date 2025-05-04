@@ -39,11 +39,38 @@ def create_feature_presentation(keyframe_summaries: List[str],
     localized_summary = "Key Features Summary"
     if language and language.lower() != "english":
         import openai
-        translation_prompt = f"Translate the following phrases into {language}. Return a JSON object with keys 'title', 'subtitle', 'summary'.\nPhrases: title='Application Features Overview', subtitle='Generated from User Journey Analysis', summary='Key Features Summary'"
+        system_prompt = "You are an expert translator specializing in UI text."
+        user_prompt = f"""
+Translate the following English phrases into {language}.
+
+**Input Phrases:**
+- title: Application Features Overview
+- subtitle: Generated from User Journey Analysis
+- summary: Key Features Summary
+
+**Output Format:**
+Return ONLY a valid JSON object with the translated phrases assigned to the corresponding keys ('title', 'subtitle', 'summary').
+
+Example for Spanish:
+```json
+{{
+  "title": "Resumen de las Características de la Aplicación",
+  "subtitle": "Generado a partir del Análisis del Recorrido del Usuario",
+  "summary": "Resumen de Características Clave"
+}}
+```
+
+**Translate to:** {language}
+
+**Output (JSON only):**
+"""
         response = openai.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": translation_prompt}],
-            max_tokens=150
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=200 # Slightly increased for safety
         )
         import json
         try:
@@ -186,28 +213,66 @@ def _extract_main_features(user_journey: str, language: str = None) -> List[Dict
     """
     # Use OpenAI to extract main features
     import openai
-    
-    prompt = """
-    Given this user journey, identify the top 5 main features of the application.
-    For each feature provide:
-    1. A short title (2-4 words)
-    2. A brief description (2-3 sentences)
-    Format as JSON list of objects with 'title' and 'description' fields.
-    
-    User Journey:
-    """
-    if language and language.lower() != "english":
-        prompt += f"\nOutput ONLY in {language}."
-    
+
+    system_prompt = "You are a feature analyst expert at summarizing key application capabilities from user journey descriptions."
+    user_prompt = f"""
+Analyze the provided User Journey description and identify the top 5 main features or capabilities demonstrated.
+
+**Instructions:**
+1.  Identify the 5 most prominent and distinct features shown in the journey.
+2.  For each feature, provide:
+    *   `title`: A concise title (2-4 words).
+    *   `description`: A brief description (1-3 sentences) explaining the feature's purpose or benefit.
+{f'3.  Generate the titles and descriptions ONLY in {language}.' if language and language.lower() != "english" else ''}
+
+**Output Format:**
+Return ONLY a valid JSON object containing a single key "features" whose value is a list of the 5 feature objects. Example:
+```json
+{{
+  "features": [
+    {{
+      "title": "Feature Title 1",
+      "description": "Description of feature 1."
+    }},
+    {{
+      "title": "Feature Title 2",
+      "description": "Description of feature 2."
+    }},
+    ... (up to 5 features)
+  ]
+}}
+```
+
+**Input Data:**
+
+### User Journey:
+{user_journey}
+
+---
+**Top 5 Features (JSON object only):**
+"""
+
     response = openai.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {"role": "user", 
-             "content": prompt + user_journey}
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
         ],
-        response_format={ "type": "json_object" }
+        response_format={ "type": "json_object" },
+        max_tokens=500 # Adjusted max_tokens
     )
-    
+
     # Parse the JSON string into a Python dictionary
-    features = json.loads(response.choices[0].message.content)
-    return features['features']
+    try:
+        content = json.loads(response.choices[0].message.content)
+        # Validate structure slightly
+        if isinstance(content, dict) and 'features' in content and isinstance(content['features'], list):
+             return content['features']
+        else:
+             print("[WARN] Unexpected JSON structure received from feature extraction.")
+             # Attempt to return the raw list if possible, or empty list
+             return content.get('features', []) if isinstance(content, dict) else []
+    except json.JSONDecodeError as e:
+        print(f"[ERROR] Failed to decode JSON from feature extraction: {e}")
+        print("Raw response:", response.choices[0].message.content)
+        return [] # Return empty list on error
