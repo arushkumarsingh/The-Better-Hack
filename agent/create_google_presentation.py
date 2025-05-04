@@ -10,7 +10,7 @@ from pathlib import Path
 
 # Define cache directory for presentation metadata
 PRESENTATION_CACHE_DIR = Path("cache/presentations")
-PRESENTATION_CACHE_DIR.mkdir(exist_ok=True)
+PRESENTATION_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 def get_presentation_cache_path(presentation_id: str) -> Path:
     """Get the cache path for a presentation's metadata"""
@@ -100,7 +100,7 @@ def add_change_comment(slides_service, presentation_id: str, slide_id: str, chan
                 'pageObjectId': slide_id,
                 'size': {
                     'width': {'magnitude': 400, 'unit': 'PT'},
-                    'height': {'magnitude': 100, 'unit': 'PT'}
+                    'height': {'magnitude': 600, 'unit': 'PT'}
                 },
                 'transform': {
                     'scaleX': 1,
