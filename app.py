@@ -7,7 +7,7 @@ from preprocess.transcribe import transcribe_audio
 from preprocess.keyframes import extract_keyframes
 from preprocess.keyframe_analysis import summarize_keyframe, consolidate_user_journey
 from agent.generate_doc import generate_folder_structure, generate_markdown_skeletons, populate_markdown_files
-from agent.create_presentation import create_feature_presentation
+from agent.create_presentation import create_feature_presentation, create_google_feature_presentation
 from tqdm import tqdm
 import argparse
 
@@ -16,9 +16,14 @@ CACHE_DIR = Path("cache")
 CACHE_DIR.mkdir(exist_ok=True)
 
 def get_cache_path(name, video_path):
-    # Create a cache filename based on the video path
-    video_hash = str(abs(hash(video_path)))[-8:]
-    return CACHE_DIR / f"{name}_{video_hash}.pkl"
+    """Create a stable cache filename based on the video path"""
+    # Use the last part of the path (filename) instead of hash
+    video_name = Path(video_path).stem
+    # Remove any special characters and spaces
+    video_name = ''.join(c for c in video_name if c.isalnum())
+    # Limit the length of the video name
+    video_name = video_name[:32]
+    return CACHE_DIR / f"{name}_{video_name}.pkl"
 
 def load_from_cache(cache_path):
     """Load data from cache if it exists"""
@@ -78,9 +83,9 @@ def process_keyframes(video_path, force=False):
 
 def process_keyframe_summaries(keyframes, force=False):
     """Analyze keyframes and generate summaries"""
-    # Create a unique identifier for the keyframes
-    keyframes_id = str(len(keyframes)) + "_" + str(hash(str(keyframes[0]) if keyframes else ""))
-    cache_path = get_cache_path(f"keyframe_summaries_{keyframes_id}", str(keyframes_id))
+    # Use a stable identifier for the keyframes based on their count
+    keyframes_id = f"keyframe_summaries_{len(keyframes)}"
+    cache_path = get_cache_path(keyframes_id, "keyframes")
     
     if not force:
         cached = load_from_cache(cache_path)
@@ -141,7 +146,7 @@ def process_documentation(transcript, user_journey_flow, base_path="output/docs"
 def create_presentation(keyframe_summaries, user_journey_flow, keyframe_paths, output_path="output/presentation", force=False, language=None):
     """Create a presentation from keyframes and user journey"""
     print("Generating feature presentation...")
-    presentation_path = create_feature_presentation(
+    presentation_path = create_google_feature_presentation(
         keyframe_summaries,
         user_journey_flow,
         keyframe_paths,

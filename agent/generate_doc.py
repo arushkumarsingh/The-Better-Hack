@@ -4,6 +4,7 @@ import os
 import json
 
 import re
+from pathlib import Path
 
 def generate_folder_structure(transcript, user_journey_flow, model="gpt-4o-mini", language=None):
     prompt = f"""
@@ -41,7 +42,8 @@ def generate_markdown_skeletons(folder_structure, user_journey_flow, base_path="
     Recursively creates folders/files and writes skeleton markdowns with section headings and navigation links.
     """
     def recurse(struct, path, parent_nav=None):
-        os.makedirs(path, exist_ok=True)
+        Path(path).mkdir(parents=True, exist_ok=True)
+
         for name, child in struct.items():
             full_path = os.path.join(path, name)
             if child is None:
