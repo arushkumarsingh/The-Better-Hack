@@ -48,18 +48,20 @@ def summarize_keyframe(image_path: str, timestamp: str, openai_model: str = "gpt
 
 def consolidate_user_journey(summaries: List[str]) -> str:
     prompt = """
-You are a technical writer and UX analyst. Given the following step-wise summaries of key application screenshots, consolidate them into a clear, numbered 'User Journey Flow' that describes:
-- The sequence of actions and transitions a user experiences in the app.
+You are an outcome-oriented product educator and UX analyst. Given the following step-wise summaries of key application screenshots, consolidate them into a clear, numbered 'How-To User Journey Guide' that describes:
+- The overall flow and practical outcomes the user can achieve with the app.
+- For each step, explain what the user is trying to accomplish, the real-world use case, and how it fits into the broader application or workflow.
+- Highlight the main applications and use cases covered by the demo.
 - For each step, list all clickable buttons or interactive elements visible on the screen, and provide your best estimate of what each button does (based on its label, icon, or context).
-- Track and note the navigation flow: if a button is clicked, where does it likely take the user? Keep a running tab of which button leads to which screen or section.
+- Focus on user goals, practical benefits, and actionable guidance, not technical details.
 - Present this information in a structured way for each step: include clickable elements, their likely function, and navigation mapping.
-- Focus on clarity, logical order, and avoid repetition.
+- Use clear, outcome-focused language and avoid repetition.
 
 Summaries:
 """
     for i, summary in enumerate(summaries, 1):
         prompt += f"{i}. {summary}\n"
-    prompt += "\nUser Journey Flow (numbered steps, with clickable elements and navigation mapping):"
+    prompt += "\nHow-To User Journey Guide (numbered steps, with a description of visible UI elements, use cases, user goals, and actionable outcomes of each step):"
     response = openai.chat.completions.create(
         model="gpt-4o",
         messages=[{"role": "user", "content": prompt}],

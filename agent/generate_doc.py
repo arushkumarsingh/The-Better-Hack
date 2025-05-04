@@ -8,7 +8,7 @@ from pathlib import Path
 
 def generate_folder_structure(transcript, user_journey_flow, model="gpt-4o-mini", language=None):
     prompt = f"""
-You are a technical writer. Based on the transcript and the following User Journey Flow, propose a logical folder and markdown file structure for comprehensive documentation. Use nested folders if needed. Output ONLY valid JSON, and nothing else (no explanations, no markdown, no prose). Example: {{"docs": {{"introduction.md": null, "usage": {{"step1.md": null}}}}}}
+You are an outcome-focused documentation expert. Based on the transcript and the following User Journey Flow, propose a logical folder and markdown file structure for a practical, how-to, outcome-oriented guide. Structure the documentation to help users achieve real goals, understand use cases, and follow step-by-step outcomes. Use nested folders if needed. Output ONLY valid JSON, and nothing else (no explanations, no markdown, no prose). Example: {{"docs": {{"introduction.md": null, "usage": {{"step1.md": null}}}}}}
 
 User Journey Flow:
 {user_journey_flow}
@@ -17,7 +17,8 @@ Transcript:
 {transcript}
 """
     if language and language.lower() != "english":
-        prompt += f"\nOutput ONLY in {language}."
+
+        prompt += f"\nOutput a translated version of the doc ONLY in {language}."
     response = openai.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": prompt}],
@@ -69,9 +70,9 @@ def populate_markdown_files(folder_structure, transcript, user_journey_flow, bas
                 with open(full_path, "r") as f:
                     skeleton = f.read()
                 prompt = f"""
-You are a technical writer. Given the following transcript (with a timestamp for every sentence), user journey flow (with a timestamp for every keyframe summary), and this markdown skeleton, populate the markdown file with detailed, relevant documentation. The user journey flow is provided ONLY for your understanding and context—do NOT include it, reference it, or copy from it in the final documentation. Use the user journey flow and transcript to inform your synthesis, but only write clear, concise, non-repetitive documentation in the markdown file. Do NOT include transcript quotes, explicit transcript lines, or timestamps in the final documentation. Fill in all sections. Cross-reference other docs where appropriate.
+You are a practical documentation and how-to guide creator. Given the following transcript, user journey flow, and markdown skeleton, write an outcome-oriented, easy-to-follow documentation section. Focus on user goals, real-world use cases, and actionable, step-by-step instructions that help users achieve the outcomes shown in the demo.
 
-User Journey Flow (for your understanding only, do NOT include or reference this in the docs):
+User Journey Flow:
 {user_journey_flow}
 
 Transcript:
@@ -81,7 +82,7 @@ Markdown Skeleton:
 {skeleton}
 """
                 if language and language.lower() != "english":
-                    prompt += f"\nOutput ONLY in {language}."
+                    prompt += f"\nOutput a translated version of the doc ONLY in {language}."
                 response = openai.chat.completions.create(
                     model=model,
                     messages=[{"role": "user", "content": prompt}],
@@ -97,7 +98,7 @@ Markdown Skeleton:
 
 def generate_markdown(transcript, user_journey_flow):
     prompt = f"""
-You are a technical writer. Based on the transcript and the following 'User Journey Flow' (which summarizes the sequence of user actions and application states based on key screenshots), create clear, step-by-step software documentation in markdown.
+You are a how-to guide creator. Based on the transcript and the following 'User Journey Flow' (which summarizes the sequence of user actions and application states based on key screenshots), create clear, outcome-oriented, step-by-step guidance in markdown. Focus on what the user is trying to accomplish, practical applications, and the benefits of each step. Make the documentation easy to follow for someone who wants to achieve the same outcomes as shown in the demo.
 
 User Journey Flow:
 {user_journey_flow}
@@ -107,7 +108,8 @@ Transcript:
 
 Instructions:
 - Structure the documentation around the steps in the User Journey Flow.
-- For each step, reference relevant transcript details and visual context.
+- For each step, explain the user goal, use case, and practical benefit.
+- Reference relevant transcript details and visual context.
 - Use headings, bullet points, and numbered steps for clarity.
 """
     response = openai.chat.completions.create(
