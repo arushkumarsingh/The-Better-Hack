@@ -10,7 +10,7 @@ from preprocess.keyframes import extract_keyframes
 from preprocess.keyframe_analysis import summarize_keyframe, consolidate_user_journey
 from agent.generate_doc import generate_folder_structure, generate_markdown_skeletons, populate_markdown_files
 from agent.generate_persona_doc import extract_personas_usecases, select_lucrative_features
-from agent.create_presentation import create_feature_presentation
+from agent.create_presentation import create_feature_presentation, create_google_feature_presentation
 
 app = FastAPI()
 
@@ -229,7 +229,7 @@ def download_docs_zip(video_id: str):
     # Return path to FileResponse
     return FileResponse(tmp.name, filename=f"docs_{video_id}.zip", media_type="application/zip")
 
-def process_video(video_id: str, video_path: str, language: str = None):
+def process_video(video_id: str, video_path: str, language: str = None, prompt: str = "", persona: str = ""):
     try:
         STATUS[video_id] = "extracting_audio"
         audio_path = extract_audio(video_path)
@@ -335,17 +335,17 @@ async def process_endpoint(video_id: str, background_tasks: BackgroundTasks, req
         raise HTTPException(status_code=404, detail="Video not found")
     video_path = os.path.join(UPLOAD_DIR, video_files[0])
 
-    # Parse prompt/persona from JSON body if present
+    # Parse prompt/persona/language from JSON body if present
     try:
         data = await request.json()
     except Exception:
         data = {}
     prompt = data.get("prompt", "")
     persona = data.get("persona", "")
+    language = data.get("language", None)
 
-    # Call should_localize to determine language
-    language = None
-    if prompt or persona:
+    # If language is not provided, try to determine it from prompt/persona
+    if not language and (prompt or persona):
         try:
             # Directly call the OpenAI API logic here instead of HTTP roundtrip
             import openai
@@ -377,7 +377,8 @@ async def process_endpoint(video_id: str, background_tasks: BackgroundTasks, req
                     language = result["target_language"]
         except Exception as e:
             language = None
-    background_tasks.add_task(process_video, video_id, video_path, language)
+
+    background_tasks.add_task(process_video, video_id, video_path, language, prompt, persona)
     STATUS[video_id] = "processing"
     return {"status": "processing started", "language": language}
 

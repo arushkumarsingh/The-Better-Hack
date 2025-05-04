@@ -159,7 +159,8 @@ def add_change_comment(slides_service, presentation_id: str, slide_id: str, chan
 def create_google_feature_presentation(keyframe_summaries: List[str],
                                      user_journey: str,
                                      image_paths: List[str],
-                                     output_path: str = "Application Features Overview") -> str:
+                                     output_path: str = "Application Features Overview",
+                                     language: str = "english")  -> str:
     """
     Creates a professional Google Slides presentation highlighting the main features
     Returns the presentation ID
