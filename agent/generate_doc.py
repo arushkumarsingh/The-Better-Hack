@@ -112,10 +112,19 @@ Your task is to write the content for a specific section of a documentation guid
 **Instructions:**
 1.  Focus on user goals, real-world use cases, and actionable step-by-step instructions relevant to this specific section (indicated by the skeleton).
 2.  Use the User Journey Flow and Transcript as primary sources for the steps and outcomes.
-3.  Populate the provided Markdown Skeleton with detailed content. Use headings, lists, code blocks (if applicable), and clear language.
-4.  Ensure the content helps users achieve the outcomes demonstrated in the video for this part of the flow.
-5.  Output ONLY the complete markdown content for this file. Do not include explanations or apologies.
-{f'**Language:** Write the entire documentation section ONLY in {language}. Translate any headings or comments from the skeleton as needed.' if language and language.lower() != "english" else ''}
+3.  Populate the provided Markdown Skeleton with detailed content.
+4.  **Markdown Formatting:**
+    *   Adhere strictly to **CommonMark** Markdown syntax.
+    *   Use standard headings (`#`, `##`, `###`, etc.), ensuring correct hierarchy.
+    *   Use standard lists (`-` or `*` for unordered, `1.` for ordered) consistently.
+    *   Use standard emphasis (`**bold**`, `*italic*`).
+    *   Format code blocks using triple backticks (```) with optional language identifiers (e.g., ```python).
+    *   Use inline code with single backticks (`code`).
+    *   Ensure proper spacing around lists and blocks for readability.
+    *   Avoid complex or non-standard Markdown extensions unless absolutely necessary.
+5.  Ensure the content helps users achieve the outcomes demonstrated in the video for this part of the flow.
+6.  Output ONLY the raw, valid Markdown content for this file. Do not include any introductory text, explanations, apologies, or concluding remarks outside the Markdown itself.
+{f'**Language:** Write the entire documentation section ONLY in {language}. Translate any headings or comments from the skeleton as needed, maintaining valid Markdown structure.' if language and language.lower() != "english" else ''}
 
 **Input Data:**
 
@@ -165,7 +174,16 @@ Based on the provided Transcript and User Journey Flow from a product demo, crea
     *   Provide clear, step-by-step instructions.
     *   Mention the benefits or outcomes of completing the step.
 3.  Reference relevant details from the Transcript and context from the User Journey Flow.
-4.  Use Markdown formatting effectively (headings, lists, bolding, code blocks if applicable) for readability.
+4.  **Markdown Formatting:**
+    *   Adhere strictly to **CommonMark** Markdown syntax.
+    *   Use standard headings (`#`, `##`, `###`, etc.), ensuring correct hierarchy.
+    *   Use standard lists (`-` or `*` for unordered, `1.` for ordered) consistently.
+    *   Use standard emphasis (`**bold**`, `*italic*`).
+    *   Format code blocks using triple backticks (```) with optional language identifiers (e.g., ```python).
+    *   Use inline code with single backticks (`code`).
+    *   Ensure proper spacing around lists and blocks for readability.
+    *   Avoid complex or non-standard Markdown extensions.
+5.  Output ONLY the raw, valid Markdown content for the complete guide. Do not include any introductory text, explanations, apologies, or concluding remarks outside the Markdown itself.
 
 **Input Data:**
 

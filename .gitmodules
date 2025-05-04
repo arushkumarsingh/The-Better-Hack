@@ -1,6 +1,3 @@
 [submodule "feature-scribe-studio"]
 	path = feature-scribe-studio
 	url = https://github.com/mhussam-ai/feature-scribe-studio.git
-[submodule "screenity"]
-	path = screenity
-	url = git@github.com:alyssaxuu/screenity.git
