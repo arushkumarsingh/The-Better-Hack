@@ -12,7 +12,8 @@ def create_feature_presentation(keyframe_summaries: List[str],
                               user_journey: str,
                               image_paths: List[str],
                               output_path: str = "output/presentation",
-                              language: str = None):
+                              language: str = None,
+                              website_context: str = None):
     """
     Creates a professional PowerPoint presentation highlighting the main features
     with proper text wrapping and formatting
@@ -28,11 +29,52 @@ def create_feature_presentation(keyframe_summaries: List[str],
     theme_color_secondary = RGBColor(255, 255, 255) # White
     theme_color_accent = RGBColor(240, 240, 240)    # Light gray
     
+    # --- Personalization Agent: Analyze website context and user journey ---
+    personalization = None
+    if website_context:
+        try:
+            import openai
+            personalization_prompt = f"""
+You are an expert product marketer and user experience researcher. Given the following website context and user journey, summarize:
+1. What the website offers (value proposition)
+2. What the user is likely looking for (user needs)
+3. How to tailor the messaging and feature highlights in a product demo deck to best resonate with this user and their context.
+Return a JSON object with keys: value_proposition, user_needs, personalized_messaging, personalized_titles (array of 5 for features).
+
+Website Context:
+{website_context}
+
+User Journey:
+{user_journey}
+"""
+            response = openai.chat.completions.create(
+                model="gpt-4o",
+                messages=[{"role": "user", "content": personalization_prompt}],
+                response_format={ "type": "json_object" }
+            )
+            personalization = json.loads(response.choices[0].message.content)
+        except Exception as e:
+            personalization = None
+    else:
+        personalization = None
+
     # Title slide
     title_slide = prs.slides.add_slide(prs.slide_layouts[0])
     title = title_slide.shapes.title
     subtitle = title_slide.placeholders[1]
 
+    # Use personalized messaging if available
+    if personalization and personalization.get("personalized_messaging"):
+        subtitle.text = personalization["personalized_messaging"][:200]
+        if len(personalization["personalized_messaging"]) > 200:
+            extra_box = title_slide.shapes.add_textbox(Inches(0.5), Inches(2.5), Inches(9), Inches(2))
+            extra_box.text = personalization["personalized_messaging"][200:600]
+    elif website_context:
+        subtitle.text = website_context[:200]
+        if len(website_context) > 200:
+            extra_box = title_slide.shapes.add_textbox(Inches(0.5), Inches(2.5), Inches(9), Inches(2))
+            extra_box.text = website_context[200:600]
+    
     # Localize static text if language is specified and not English
     localized_title = "Application Features Overview"
     localized_subtitle = "Generated from User Journey Analysis"
@@ -73,6 +115,11 @@ def create_feature_presentation(keyframe_summaries: List[str],
     
     # Extract main features from user journey
     features = _extract_main_features(user_journey, language=language)
+    # If we have personalized titles, apply them to features
+    if personalization and personalization.get("personalized_titles"):
+        for i, f in enumerate(features):
+            if i < len(personalization["personalized_titles"]):
+                f["title"] = personalization["personalized_titles"][i]
     
     # Create feature slides
     for i, (feature, image_path) in enumerate(zip(features[:5], image_paths[:5])):
@@ -162,6 +209,27 @@ def create_feature_presentation(keyframe_summaries: List[str],
     )
     summary_frame = summary_textbox.text_frame
     summary_frame.word_wrap = True
+    
+    # If personalized value prop/user needs, show them at the top of the summary slide
+    if personalization:
+        if personalization.get("value_proposition"):
+            vp_para = summary_frame.add_paragraph()
+            vp_para.text = f"Value Proposition: {personalization['value_proposition'][:400]}"
+            vp_para.font.size = Pt(14)
+            vp_para.level = 0
+            vp_para.space_after = Pt(8)
+        if personalization.get("user_needs"):
+            un_para = summary_frame.add_paragraph()
+            un_para.text = f"User Needs: {personalization['user_needs'][:400]}"
+            un_para.font.size = Pt(14)
+            un_para.level = 0
+            un_para.space_after = Pt(8)
+    elif website_context:
+        context_para = summary_frame.add_paragraph()
+        context_para.text = f"Context: {website_context[:400]}"
+        context_para.font.size = Pt(14)
+        context_para.level = 0
+        context_para.space_after = Pt(8)
     
     # Add each feature as a bullet point
     for i, feature in enumerate(features[:5]):

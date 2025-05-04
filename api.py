@@ -283,10 +283,14 @@ def upload_video(file: UploadFile = File(...)):
     STATUS[video_id] = "uploaded"
     return {"video_id": video_id, "filename": file.filename}
 
+from fastapi import Body
+import requests
+
 @app.post("/create-presentation/{video_id}")
-def create_presentation_endpoint(video_id: str, language: str = None):
+def create_presentation_endpoint(video_id: str, language: str = None, companyWebsite: str = Body(None)): 
     """
     Generates a feature presentation for the given video_id and returns the path to the PPTX file.
+    Optionally takes companyWebsite for research-based messaging.
     """
     doc_base = os.path.join(OUTPUT_DIR, video_id)
     transcript_file = os.path.join(doc_base, "transcript.txt")
@@ -296,33 +300,51 @@ def create_presentation_endpoint(video_id: str, language: str = None):
     # Load transcript
     if not os.path.exists(transcript_file):
         raise HTTPException(status_code=404, detail="Transcript not found")
-    with open(transcript_file) as f:
+    with open(transcript_file, "r") as f:
         transcript = f.read()
     # Load user journey
     if not os.path.exists(user_journey_file):
         raise HTTPException(status_code=404, detail="User journey not found")
-    with open(user_journey_file) as f:
+    with open(user_journey_file, "r") as f:
         user_journey = f.read()
     # Load keyframe summaries
     if not os.path.exists(keyframe_summaries_file):
         raise HTTPException(status_code=404, detail="Keyframe summaries not found")
-    import json
-    with open(keyframe_summaries_file) as f:
+    with open(keyframe_summaries_file, "r") as f:
         keyframe_summaries = json.load(f)
-    # Gather image paths
+    # Collect images
     image_paths = []
     if os.path.exists(keyframes_dir):
         for fname in sorted(os.listdir(keyframes_dir)):
             if fname.lower().endswith(('.png', '.jpg', '.jpeg')):
                 image_paths.append(os.path.join(keyframes_dir, fname))
-    # Call presentation generator
+    # --- Website Research Agent ---
+    website_context = ""
+    if companyWebsite:
+        try:
+            r = requests.get(companyWebsite, timeout=5)
+            if r.ok:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(r.text, 'html.parser')
+                title = soup.title.string if soup.title else ""
+                meta_desc = ""
+                desc_tag = soup.find('meta', attrs={'name': 'description'})
+                if desc_tag and desc_tag.get('content'):
+                    meta_desc = desc_tag['content']
+                # Collect some visible text
+                body_text = ' '.join([p.get_text() for p in soup.find_all('p')])[:1000]
+                website_context = f"Website: {companyWebsite}\nTitle: {title}\nDescription: {meta_desc}\nKey Info: {body_text}"
+        except Exception as e:
+            website_context = f"Could not retrieve website info: {e}"
+    # Call presentation generator, pass website_context for messaging
     output_path = os.path.join(doc_base, "presentation")
     pptx_file = create_feature_presentation(
         keyframe_summaries=keyframe_summaries,
         user_journey=user_journey,
         image_paths=image_paths,
         output_path=output_path,
-        language=language
+        language=language,
+        website_context=website_context
     )
     return {"presentation_path": pptx_file, "download_url": f"/download-presentation/{video_id}"}
 
