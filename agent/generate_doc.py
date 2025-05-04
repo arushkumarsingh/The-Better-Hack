@@ -5,24 +5,58 @@ import json
 
 import re
 from pathlib import Path
+import openai # Ensure openai is imported
 
 def generate_folder_structure(transcript, user_journey_flow, model="gpt-4o-mini", language=None):
-    prompt = f"""
-You are an outcome-focused documentation expert. Based on the transcript and the following User Journey Flow, propose a logical folder and markdown file structure for a practical, how-to, outcome-oriented guide. Structure the documentation to help users achieve real goals, understand use cases, and follow step-by-step outcomes. Use nested folders if needed. Output ONLY valid JSON, and nothing else (no explanations, no markdown, no prose). Example: {{"docs": {{"introduction.md": null, "usage": {{"step1.md": null}}}}}}
+    system_prompt = "You are an expert documentation architect specializing in creating logical, outcome-oriented information structures."
+    user_prompt = f"""
+Based on the provided User Journey Flow and Transcript from a product demo, propose a logical folder and markdown file structure for a practical 'how-to' guide.
 
-User Journey Flow:
+**Goal:** Design a structure that helps users easily find information to achieve specific goals and understand use cases demonstrated in the video.
+
+**Requirements:**
+1.  The structure should reflect the logical flow of the user journey.
+2.  Use clear, descriptive names for folders and files (e.g., `getting_started/`, `core_features/feature_a.md`).
+3.  Use nested folders where appropriate for organization.
+4.  The output MUST be ONLY a valid JSON object representing the structure. Keys are folder/file names. Values are nested objects for folders or `null` for files.
+
+**Output Format Example:**
+```json
+{{
+  "docs": {{
+    "introduction.md": null,
+    "getting_started": {{
+      "installation.md": null,
+      "first_steps.md": null
+    }},
+    "main_feature_a": {{
+      "overview.md": null,
+      "how_to_use_a.md": null
+    }},
+    "troubleshooting.md": null
+  }}
+}}
+```
+{f'**Language:** Generate all folder and file names ONLY in {language}.' if language and language.lower() != "english" else ''}
+
+**Input Data:**
+
+### User Journey Flow:
 {user_journey_flow}
 
-Transcript:
+### Transcript:
 {transcript}
-"""
-    if language and language.lower() != "english":
 
-        prompt += f"\nOutput a translated version of the doc ONLY in {language}."
+---
+**Proposed Folder Structure (JSON only):**
+"""
     response = openai.chat.completions.create(
         model=model,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=400
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        max_tokens=600 # Increased slightly for potentially deeper structures
     )
     raw = response.choices[0].message.content.strip()
     try:
@@ -69,26 +103,46 @@ def populate_markdown_files(folder_structure, transcript, user_journey_flow, bas
                 # Read skeleton
                 with open(full_path, "r") as f:
                     skeleton = f.read()
-                prompt = f"""
-You are a practical documentation and how-to guide creator. Given the following transcript, user journey flow, and markdown skeleton, write an outcome-oriented, easy-to-follow documentation section. Focus on user goals, real-world use cases, and actionable, step-by-step instructions that help users achieve the outcomes shown in the demo.
+                system_prompt = "You are a practical documentation writer, skilled at creating clear, outcome-oriented how-to guides based on provided context."
+                user_prompt = f"""
+Your task is to write the content for a specific section of a documentation guide, based on the provided User Journey Flow, Transcript, and the Markdown Skeleton for this section.
 
-User Journey Flow:
+**Goal:** Create an easy-to-follow, practical guide for the user actions covered in this section.
+
+**Instructions:**
+1.  Focus on user goals, real-world use cases, and actionable step-by-step instructions relevant to this specific section (indicated by the skeleton).
+2.  Use the User Journey Flow and Transcript as primary sources for the steps and outcomes.
+3.  Populate the provided Markdown Skeleton with detailed content. Use headings, lists, code blocks (if applicable), and clear language.
+4.  Ensure the content helps users achieve the outcomes demonstrated in the video for this part of the flow.
+5.  Output ONLY the complete markdown content for this file. Do not include explanations or apologies.
+{f'**Language:** Write the entire documentation section ONLY in {language}. Translate any headings or comments from the skeleton as needed.' if language and language.lower() != "english" else ''}
+
+**Input Data:**
+
+### User Journey Flow (Overall Context):
 {user_journey_flow}
 
-Transcript:
+### Transcript (Overall Context):
 {transcript}
 
-Markdown Skeleton:
+### Markdown Skeleton (for this specific file):
+```markdown
 {skeleton}
+```
+
+---
+**Populated Markdown Content (for this file only):**
 """
-                if language and language.lower() != "english":
-                    prompt += f"\nOutput a translated version of the doc ONLY in {language}."
                 response = openai.chat.completions.create(
                     model=model,
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=800
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    max_tokens=1200 # Increased tokens for potentially longer content
                 )
-                with open(full_path, "w") as f:
+                # Ensure writing in UTF-8 for broader language support
+                with open(full_path, "w", encoding="utf-8") as f:
                     f.write(response.choices[0].message.content)
             else:
                 recurse(child, full_path)
@@ -96,24 +150,40 @@ Markdown Skeleton:
 
 # (Legacy) Single-step doc generator for reference
 
-def generate_markdown(transcript, user_journey_flow):
-    prompt = f"""
-You are a how-to guide creator. Based on the transcript and the following 'User Journey Flow' (which summarizes the sequence of user actions and application states based on key screenshots), create clear, outcome-oriented, step-by-step guidance in markdown. Focus on what the user is trying to accomplish, practical applications, and the benefits of each step. Make the documentation easy to follow for someone who wants to achieve the same outcomes as shown in the demo.
+def generate_markdown(transcript, user_journey_flow, model="gpt-4o-mini"): # Added model parameter consistency
+    system_prompt = "You are a technical writer creating a comprehensive how-to guide."
+    user_prompt = f"""
+Based on the provided Transcript and User Journey Flow from a product demo, create a clear, outcome-oriented, step-by-step guide in Markdown format.
 
-User Journey Flow:
+**Goal:** Produce documentation that is easy to follow for someone wanting to achieve the same outcomes shown in the demo.
+
+**Instructions:**
+1.  Structure the guide logically, likely following the steps outlined in the User Journey Flow.
+2.  For each significant step or section:
+    *   Explain the user's goal for that step.
+    *   Describe the practical application or use case.
+    *   Provide clear, step-by-step instructions.
+    *   Mention the benefits or outcomes of completing the step.
+3.  Reference relevant details from the Transcript and context from the User Journey Flow.
+4.  Use Markdown formatting effectively (headings, lists, bolding, code blocks if applicable) for readability.
+
+**Input Data:**
+
+### User Journey Flow:
 {user_journey_flow}
 
-Transcript:
+### Transcript:
 {transcript}
 
-Instructions:
-- Structure the documentation around the steps in the User Journey Flow.
-- For each step, explain the user goal, use case, and practical benefit.
-- Reference relevant transcript details and visual context.
-- Use headings, bullet points, and numbered steps for clarity.
+---
+**Generated How-To Guide (Markdown):**
 """
     response = openai.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}]
+        model=model, # Use specified model
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        max_tokens=2000 # Allow for a longer single document
     )
     return response.choices[0].message.content

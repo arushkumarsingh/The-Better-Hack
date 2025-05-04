@@ -2,27 +2,60 @@ import openai
 import os
 import json
 import re
+import openai # Ensure openai is imported if not already
 
 def extract_personas_usecases(transcript, keyframe_summaries, model="gpt-4o-mini"):
-    prompt = f"""
-You are a product strategist. Based on the transcript and keyframe summaries from a product/app demo video, extract:
-1. The main applications of the app.
-2. The most relevant use cases for each application.
-3. The user personas who would benefit from this app, with a brief description for each persona.
+    system_prompt = "You are a product strategist analyzing product demo materials."
+    user_prompt = f"""
+Based on the provided transcript and keyframe summaries from a product/app demo video, perform the following analysis:
 
-Return ONLY valid JSON of the form:
-{"applications": [...], "use_cases": {"application": ["use_case1", ...]}, "personas": [{"name": ..., "description": ..., "relevant_applications": [...]}]}
+**Instructions:**
+1.  Identify the main applications or distinct functional areas of the app demonstrated.
+2.  For each application, list the most relevant use cases shown or implied.
+3.  Define the likely user personas who would benefit most from this app. For each persona, provide a brief description and list the applications relevant to them.
 
-Transcript:
+**Output Format:**
+Return ONLY valid JSON matching this structure exactly:
+```json
+{{
+  "applications": ["App Area 1", "App Area 2", ...],
+  "use_cases": {{
+    "App Area 1": ["Use Case 1.1", "Use Case 1.2", ...],
+    "App Area 2": ["Use Case 2.1", ...]
+  }},
+  "personas": [
+    {{
+      "name": "Persona Name 1",
+      "description": "Brief description of persona 1.",
+      "relevant_applications": ["App Area 1", ...]
+    }},
+    {{
+      "name": "Persona Name 2",
+      "description": "Brief description of persona 2.",
+      "relevant_applications": ["App Area 2", ...]
+    }}
+  ]
+}}
+```
+
+**Input Data:**
+
+### Transcript:
 {transcript}
 
-Keyframe Summaries:
+### Keyframe Summaries:
 {keyframe_summaries}
+
+---
+**Analysis Result (JSON only):**
 """
     response = openai.chat.completions.create(
         model=model,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=600
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        max_tokens=800 # Increased slightly for potentially more detailed JSON
     )
     raw = response.choices[0].message.content.strip()
     try:
@@ -38,23 +71,56 @@ Keyframe Summaries:
         raise
 
 def select_lucrative_features(transcript, keyframe_summaries, persona, model="gpt-4o-mini"):
-    prompt = f"""
-You are a product strategist. Given the transcript and keyframe summaries of an app demo, and a specific user persona, analyze the entire app and select the features, flows, or sections that will be MOST useful and lucrative for this persona. For each, provide a short justification. Return ONLY valid JSON of the form:
-{"persona": ..., "top_features": [{"feature": ..., "justification": ...}]}
+    system_prompt = "You are a product strategist identifying high-value features for specific user segments."
+    user_prompt = f"""
+Given the transcript and keyframe summaries of an app demo, and the specific user persona provided below, analyze the entire app demonstration.
 
-Persona:
-{persona}
+**Instructions:**
+1.  Identify the features, workflows, or application sections demonstrated that will be MOST useful and potentially lucrative (e.g., driving adoption, solving key pain points) for the specified persona.
+2.  Select the top 3-5 most impactful features/flows.
+3.  For each selected feature/flow, provide a concise justification explaining *why* it is particularly valuable for this persona.
 
-Transcript:
+**Output Format:**
+Return ONLY valid JSON matching this structure exactly:
+```json
+{{
+  "persona": {{ ... persona object as provided ... }},
+  "top_features": [
+    {{
+      "feature": "Feature/Flow Name 1",
+      "justification": "Concise reason why this is valuable for the persona."
+    }},
+    {{
+      "feature": "Feature/Flow Name 2",
+      "justification": "Concise reason why this is valuable for the persona."
+    }},
+    ...
+  ]
+}}
+```
+**Input Data:**
+
+### Target Persona:
+```json
+{json.dumps(persona, indent=2)}
+```
+
+### Transcript:
 {transcript}
 
-Keyframe Summaries:
+### Keyframe Summaries:
 {keyframe_summaries}
+
+---
+**Top Features Analysis (JSON only):**
 """
     response = openai.chat.completions.create(
         model=model,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=600
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        max_tokens=700 # Adjusted token count
     )
     raw = response.choices[0].message.content.strip()
     try:

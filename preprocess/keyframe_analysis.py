@@ -23,7 +23,10 @@ def summarize_keyframe(image_path: str, timestamp: str, openai_model: str = "gpt
     image_url = f"data:image/jpeg;base64,{img_b64}"
     context_instruction = ""
     if previous_context:
-        context_instruction = f"\nThe previous keyframe context is: {previous_context}\nConnect this context to the current summary for narrative continuity."
+        context_instruction = f"\n\n**Previous Context:**\n{previous_context}\nConnect this context to the current summary for narrative continuity."
+    else:
+        context_instruction = ""
+
     response = openai.chat.completions.create(
         model=openai_model,
         messages=[
@@ -31,40 +34,87 @@ def summarize_keyframe(image_path: str, timestamp: str, openai_model: str = "gpt
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": f"Describe what is happening in this application screenshot. Focus on user actions, visible UI elements, and any transitions or changes. The timestamp for this keyframe is {timestamp}. Include this timestamp at the start of your summary in the format [mm:ss].{context_instruction}"},
+                    {
+                        "type": "text",
+                        "text": f"""Analyze the application screenshot provided.
+
+                        **Instructions:**
+                        1.  Start your response *immediately* with the timestamp in [mm:ss] format: {timestamp}
+                        2.  Describe the primary user action or application state visible.
+                        3.  Mention key visible UI elements involved (buttons, menus, fields).
+                        4.  Note any apparent transitions or changes from a previous state (if applicable, based on the context below).
+                        5.  Be concise and focus only on what is visible.
+
+                        **Timestamp:** {timestamp}
+                        {context_instruction}"""
+                    },
                     {"type": "image_url", "image_url": {"url": image_url}}
                 ]
             }
         ],
-        max_tokens=200
+        max_tokens=200 # Keep max_tokens or adjust if needed
     )
     summary = response.choices[0].message.content.strip()
-    # Ensure timestamp is present at the start
-    if not summary.startswith(timestamp):
-        summary = f"{timestamp} {summary}"
+    # The check 'if not summary.startswith(timestamp):' might become redundant
+    # if the model consistently follows the new instruction 1. Can be kept for safety.
+    # Ensure timestamp is present at the start (Safety check)
+    if not summary.startswith(f"[{timestamp.split(':')[0]}:{timestamp.split(':')[1]}]"): # Check format [mm:ss]
+         # Attempt to find timestamp pattern if not at start
+         import re
+         match = re.search(r"\[\d{1,2}:\d{2}\]", summary)
+         if match:
+             # If found elsewhere, move it to the start
+             ts = match.group(0)
+             summary = ts + " " + summary.replace(ts, "").strip()
+         else:
+             # If not found at all, prepend it
+             summary = f"[{timestamp.split(':')[0]}:{timestamp.split(':')[1]}] {summary}"
+
     return summary
 
 # Consolidate all keyframe summaries into a user journey flow
 
 def consolidate_user_journey(summaries: List[str]) -> str:
-    prompt = """
-You are an outcome-oriented product educator and UX analyst. Given the following step-wise summaries of key application screenshots, consolidate them into a clear, numbered 'How-To User Journey Guide' that describes:
-- The overall flow and practical outcomes the user can achieve with the app.
-- For each step, explain what the user is trying to accomplish, the real-world use case, and how it fits into the broader application or workflow.
-- Highlight the main applications and use cases covered by the demo.
-- For each step, list all clickable buttons or interactive elements visible on the screen, and provide your best estimate of what each button does (based on its label, icon, or context).
-- Focus on user goals, practical benefits, and actionable guidance, not technical details.
-- Present this information in a structured way for each step: include clickable elements, their likely function, and navigation mapping.
-- Use clear, outcome-focused language and avoid repetition.
+    system_prompt = "You are an outcome-oriented product educator and UX analyst, skilled at creating clear, practical 'How-To' guides from application usage summaries."
 
-Summaries:
+    instruction_prompt = """
+Based on the provided step-wise summaries from key application screenshots, create a clear, numbered 'How-To User Journey Guide'.
+
+**Your Goal:** Produce a guide focused on user goals, practical benefits, and actionable steps to achieve outcomes shown in the demo. Avoid technical jargon and repetition.
+
+**Requirements for the Guide:**
+1.  **Overall Flow:** Start with a brief description of the overall workflow and the main practical outcomes the user can achieve.
+2.  **Main Use Cases:** Briefly highlight the primary applications or use cases demonstrated.
+3.  **Numbered Steps:** For each summary provided:
+    *   **Explain the Goal:** What is the user trying to accomplish in this step? What is the real-world use case?
+    *   **Identify Interactable Elements:** List visible clickable buttons, fields, or interactive elements. For each, estimate its likely function based on label, icon, or context.
+    *   **Describe Action/Outcome:** Clearly state the action taken and the resulting state or benefit.
+    *   **Use Outcome-Focused Language:** Emphasize what the user achieves.
+
+**Output Format for Each Step:** Follow this structure precisely:
+
+**Step [Number]: [Concise Step Goal/Action]**
+*   **Use Case:** [Brief explanation of the real-world scenario]
+*   **Visible Elements:**
+    *   [Element Name/Description]: [Likely Function]
+    *   ... (list all relevant elements)
+*   **Guidance/Outcome:** [Description of the action taken and the result/benefit]
+
+---
+**Input Summaries:**
 """
-    for i, summary in enumerate(summaries, 1):
-        prompt += f"{i}. {summary}\n"
-    prompt += "\nHow-To User Journey Guide (numbered steps, with a description of visible UI elements, use cases, user goals, and actionable outcomes of each step):"
+
+    # Append numbered summaries to the instruction prompt
+    input_data = "\n".join([f"{i}. {summary}" for i, summary in enumerate(summaries, 1)])
+
+    full_user_prompt = instruction_prompt + "\n" + input_data + "\n\n---\n**How-To User Journey Guide:**"
+
     response = openai.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=800
+        model="gpt-4o", # Keep model or adjust
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": full_user_prompt}
+        ],
+        max_tokens=1000 # Increased slightly to accommodate structure, adjust as needed
     )
     return response.choices[0].message.content
