@@ -5,7 +5,7 @@ import json
 
 import re
 
-def generate_folder_structure(transcript, user_journey_flow, model="gpt-4o-mini"):
+def generate_folder_structure(transcript, user_journey_flow, model="gpt-4o-mini", language=None):
     prompt = f"""
 You are a technical writer. Based on the transcript and the following User Journey Flow, propose a logical folder and markdown file structure for comprehensive documentation. Use nested folders if needed. Output ONLY valid JSON, and nothing else (no explanations, no markdown, no prose). Example: {{"docs": {{"introduction.md": null, "usage": {{"step1.md": null}}}}}}
 
@@ -15,6 +15,8 @@ User Journey Flow:
 Transcript:
 {transcript}
 """
+    if language and language.lower() != "english":
+        prompt += f"\nOutput ONLY in {language}."
     response = openai.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": prompt}],
@@ -53,7 +55,7 @@ def generate_markdown_skeletons(folder_structure, user_journey_flow, base_path="
                 recurse(child, full_path, parent_nav=path)
     recurse(folder_structure, base_path)
 
-def populate_markdown_files(folder_structure, transcript, user_journey_flow, base_path="output/docs", model="gpt-4o-mini"):
+def populate_markdown_files(folder_structure, transcript, user_journey_flow, base_path="output/docs", model="gpt-4o-mini", language=None):
     """
     For each markdown file in the folder structure, use AI to populate it with detailed content.
     """
@@ -76,6 +78,8 @@ Transcript:
 Markdown Skeleton:
 {skeleton}
 """
+                if language and language.lower() != "english":
+                    prompt += f"\nOutput ONLY in {language}."
                 response = openai.chat.completions.create(
                     model=model,
                     messages=[{"role": "user", "content": prompt}],

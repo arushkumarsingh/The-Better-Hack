@@ -113,7 +113,7 @@ def process_user_journey(keyframe_summaries, force=False):
     save_to_cache(user_journey_flow, cache_path)
     return user_journey_flow
 
-def process_documentation(transcript, user_journey_flow, base_path="output/docs", force=False):
+def process_documentation(transcript, user_journey_flow, base_path="output/docs", force=False, language=None):
     """Generate documentation from transcript and user journey"""
     cache_path = get_cache_path("folder_structure", str(hash(str(user_journey_flow))))
     
@@ -123,29 +123,30 @@ def process_documentation(transcript, user_journey_flow, base_path="output/docs"
             folder_structure = cached
         else:
             print("Generating documentation folder structure...")
-            folder_structure = generate_folder_structure(transcript, user_journey_flow)
+            folder_structure = generate_folder_structure(transcript, user_journey_flow, language=language)
             save_to_cache(folder_structure, cache_path)
     else:
         print("Generating documentation folder structure...")
-        folder_structure = generate_folder_structure(transcript, user_journey_flow)
+        folder_structure = generate_folder_structure(transcript, user_journey_flow, language=language)
         save_to_cache(folder_structure, cache_path)
     
     print("Creating markdown skeletons...")
     generate_markdown_skeletons(folder_structure, user_journey_flow, base_path=base_path)
     
     print("Populating documentation files...")
-    populate_markdown_files(folder_structure, transcript, user_journey_flow, base_path=base_path)
+    populate_markdown_files(folder_structure, transcript, user_journey_flow, base_path=base_path, language=language)
     
     return base_path
 
-def create_presentation(keyframe_summaries, user_journey_flow, keyframe_paths, output_path="output/presentation", force=False):
+def create_presentation(keyframe_summaries, user_journey_flow, keyframe_paths, output_path="output/presentation", force=False, language=None):
     """Create a presentation from keyframes and user journey"""
     print("Generating feature presentation...")
     presentation_path = create_feature_presentation(
         keyframe_summaries,
         user_journey_flow,
         keyframe_paths,
-        output_path=output_path
+        output_path=output_path,
+        language=language
     )
     return presentation_path
 

@@ -10,6 +10,7 @@ from preprocess.keyframes import extract_keyframes
 from preprocess.keyframe_analysis import summarize_keyframe, consolidate_user_journey
 from agent.generate_doc import generate_folder_structure, generate_markdown_skeletons, populate_markdown_files
 from agent.generate_persona_doc import extract_personas_usecases, select_lucrative_features
+from agent.create_presentation import create_feature_presentation
 
 app = FastAPI()
 
@@ -31,6 +32,57 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 from fastapi.responses import JSONResponse
+import openai
+import os
+from fastapi import Request, HTTPException
+
+@app.post("/api/should-localize")
+def should_localize(request: Request):
+    """
+    Calls OpenAI gpt-4o-mini to decide localization/personalization needs from prompt and persona.
+    Expects JSON: {"prompt": str, "persona": str}
+    Returns: {"localize": bool, "target_language": str or None, "personalize": bool, "persona": str or None}
+    """
+    data = None
+    try:
+        data = request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    prompt = data.get("prompt", "")
+    persona = data.get("persona", "")
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY not set")
+    openai.api_key = api_key
+
+    system_message = (
+        "You are an expert assistant for a documentation and deck generation tool. "
+        "Given a user prompt and persona, return a JSON object with: "
+        "localize (true if any language other than English is requested), "
+        "target_language (if any), personalize (true if persona is selected), and persona (if any). "
+        "If no localization or personalization is needed, set those fields to false/null. "
+        "Respond only with valid JSON."
+    )
+    user_message = (
+        f"Prompt: {prompt}\nPersona: {persona}\n"
+    )
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_message}
+            ],
+            temperature=0.0,
+            max_tokens=256,
+        )
+        # Parse the response content as JSON
+        import json
+        content = response.choices[0].message["content"]
+        return JSONResponse(content=json.loads(content))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"OpenAI error: {str(e)}")
 
 @app.get("/fetch_api/docs-folders")
 def list_docs_folders():
@@ -106,6 +158,7 @@ def download_docs_zip(video_id: str):
     base_dir = os.path.abspath(os.path.join(OUTPUT_DIR, video_id))
     if not os.path.exists(base_dir):
         raise HTTPException(status_code=404, detail="Documentation folder not found")
+    import tempfile
     mem_zip = BytesIO()
     with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
         for root, dirs, files in os.walk(base_dir):
@@ -114,9 +167,14 @@ def download_docs_zip(video_id: str):
                 rel_path = os.path.relpath(abs_path, base_dir)
                 zf.write(abs_path, rel_path)
     mem_zip.seek(0)
-    return FileResponse(mem_zip, filename=f"docs_{video_id}.zip", media_type="application/zip")
+    # Write BytesIO to a temp file
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f"_{video_id}.zip")
+    tmp.write(mem_zip.read())
+    tmp.close()
+    # Return path to FileResponse
+    return FileResponse(tmp.name, filename=f"docs_{video_id}.zip", media_type="application/zip")
 
-def process_video(video_id: str, video_path: str):
+def process_video(video_id: str, video_path: str, language: str = None):
     try:
         STATUS[video_id] = "extracting_audio"
         audio_path = extract_audio(video_path)
@@ -127,10 +185,11 @@ def process_video(video_id: str, video_path: str):
         STATUS[video_id] = "extracting_keyframes"
         keyframes = extract_keyframes(video_path)
 
-        STATUS[video_id] = "analyzing_keyframes"
+        STATUS[video_id] = f"analyzing_keyframes: 0/{len(keyframes)}"
         keyframe_summaries = []
         prev_context = None
-        for kf in keyframes:
+        for idx, kf in enumerate(keyframes):
+            STATUS[video_id] = f"analyzing_keyframes: {idx+1}/{len(keyframes)}"
             summary = summarize_keyframe(kf['path'], kf['timestamp'], previous_context=prev_context)
             keyframe_summaries.append(summary)
             prev_context = '\n'.join(summary.splitlines()[:2])
@@ -139,14 +198,14 @@ def process_video(video_id: str, video_path: str):
         user_journey_flow = consolidate_user_journey(keyframe_summaries)
 
         STATUS[video_id] = "generating_documentation_folder_structure"
-        folder_structure = generate_folder_structure(transcript, user_journey_flow)
+        folder_structure = generate_folder_structure(transcript, user_journey_flow, language=language)
 
         STATUS[video_id] = "creating_markdown_skeletons"
         doc_base = os.path.join(OUTPUT_DIR, video_id)
         generate_markdown_skeletons(folder_structure, user_journey_flow, base_path=doc_base)
 
         STATUS[video_id] = "populating_documentation_files"
-        populate_markdown_files(folder_structure, transcript, user_journey_flow, base_path=doc_base)
+        populate_markdown_files(folder_structure, transcript, user_journey_flow, base_path=doc_base, language=language)
 
         STATUS[video_id] = "done"
     except Exception as e:
@@ -161,15 +220,112 @@ def upload_video(file: UploadFile = File(...)):
     STATUS[video_id] = "uploaded"
     return {"video_id": video_id, "filename": file.filename}
 
+@app.post("/create-presentation/{video_id}")
+def create_presentation_endpoint(video_id: str, language: str = None):
+    """
+    Generates a feature presentation for the given video_id and returns the path to the PPTX file.
+    """
+    doc_base = os.path.join(OUTPUT_DIR, video_id)
+    transcript_file = os.path.join(doc_base, "transcript.txt")
+    user_journey_file = os.path.join(doc_base, "user_journey.txt")
+    keyframes_dir = os.path.join(doc_base, "keyframes")
+    keyframe_summaries_file = os.path.join(doc_base, "keyframe_summaries.json")
+    # Load transcript
+    if not os.path.exists(transcript_file):
+        raise HTTPException(status_code=404, detail="Transcript not found")
+    with open(transcript_file) as f:
+        transcript = f.read()
+    # Load user journey
+    if not os.path.exists(user_journey_file):
+        raise HTTPException(status_code=404, detail="User journey not found")
+    with open(user_journey_file) as f:
+        user_journey = f.read()
+    # Load keyframe summaries
+    if not os.path.exists(keyframe_summaries_file):
+        raise HTTPException(status_code=404, detail="Keyframe summaries not found")
+    import json
+    with open(keyframe_summaries_file) as f:
+        keyframe_summaries = json.load(f)
+    # Gather image paths
+    image_paths = []
+    if os.path.exists(keyframes_dir):
+        for fname in sorted(os.listdir(keyframes_dir)):
+            if fname.lower().endswith(('.png', '.jpg', '.jpeg')):
+                image_paths.append(os.path.join(keyframes_dir, fname))
+    # Call presentation generator
+    output_path = os.path.join(doc_base, "presentation")
+    pptx_file = create_feature_presentation(
+        keyframe_summaries=keyframe_summaries,
+        user_journey=user_journey,
+        image_paths=image_paths,
+        output_path=output_path,
+        language=language
+    )
+    return {"presentation_path": pptx_file, "download_url": f"/download-presentation/{video_id}"}
+
+@app.get("/download-presentation/{video_id}")
+def download_presentation(video_id: str):
+    doc_base = os.path.join(OUTPUT_DIR, video_id, "presentation")
+    pptx_file = os.path.join(doc_base, "feature_overview.pptx")
+    if not os.path.exists(pptx_file):
+        raise HTTPException(status_code=404, detail="Presentation not found")
+    return FileResponse(pptx_file, filename=f"{video_id}_feature_overview.pptx", media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation")
+
+from fastapi import Request
+
 @app.post("/process/{video_id}")
-def process_endpoint(video_id: str, background_tasks: BackgroundTasks):
+async def process_endpoint(video_id: str, background_tasks: BackgroundTasks, request: Request):
     video_files = [f for f in os.listdir(UPLOAD_DIR) if f.startswith(video_id+"_")]
     if not video_files:
         raise HTTPException(status_code=404, detail="Video not found")
     video_path = os.path.join(UPLOAD_DIR, video_files[0])
-    background_tasks.add_task(process_video, video_id, video_path)
+
+    # Parse prompt/persona from JSON body if present
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    prompt = data.get("prompt", "")
+    persona = data.get("persona", "")
+
+    # Call should_localize to determine language
+    language = None
+    if prompt or persona:
+        try:
+            # Directly call the OpenAI API logic here instead of HTTP roundtrip
+            import openai
+            api_key = os.getenv("OPENAI_API_KEY")
+            if api_key:
+                openai.api_key = api_key
+                system_message = (
+                    "You are an expert assistant for a documentation and deck generation tool. "
+                    "Given a user prompt and persona, return a JSON object with: "
+                    "localize (true if any language other than English is requested), "
+                    "target_language (if any), personalize (true if persona is selected), and persona (if any). "
+                    "If no localization or personalization is needed, set those fields to false/null. "
+                    "Respond only with valid JSON."
+                )
+                user_message = f"Prompt: {prompt}\nPersona: {persona}\n"
+                response = openai.ChatCompletion.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": system_message},
+                        {"role": "user", "content": user_message}
+                    ],
+                    temperature=0.0,
+                    max_tokens=256,
+                )
+                import json
+                content = response.choices[0].message["content"]
+                result = json.loads(content)
+                if result.get("localize") and result.get("target_language"):
+                    language = result["target_language"]
+        except Exception as e:
+            language = None
+    background_tasks.add_task(process_video, video_id, video_path, language)
     STATUS[video_id] = "processing"
-    return {"status": "processing started"}
+    return {"status": "processing started", "language": language}
+
 
 @app.get("/download/{video_id}")
 def download_doc(video_id: str):

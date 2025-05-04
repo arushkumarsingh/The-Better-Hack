@@ -10,7 +10,8 @@ from typing import List, Dict
 def create_feature_presentation(keyframe_summaries: List[str], 
                               user_journey: str,
                               image_paths: List[str],
-                              output_path: str = "output/presentation"):
+                              output_path: str = "output/presentation",
+                              language: str = None):
     """
     Creates a professional PowerPoint presentation highlighting the main features
     with proper text wrapping and formatting
@@ -30,14 +31,34 @@ def create_feature_presentation(keyframe_summaries: List[str],
     title_slide = prs.slides.add_slide(prs.slide_layouts[0])
     title = title_slide.shapes.title
     subtitle = title_slide.placeholders[1]
-    
+
+    # Localize static text if language is specified and not English
+    localized_title = "Application Features Overview"
+    localized_subtitle = "Generated from User Journey Analysis"
+    localized_summary = "Key Features Summary"
+    if language and language.lower() != "english":
+        import openai
+        translation_prompt = f"Translate the following phrases into {language}. Return a JSON object with keys 'title', 'subtitle', 'summary'.\nPhrases: title='Application Features Overview', subtitle='Generated from User Journey Analysis', summary='Key Features Summary'"
+        response = openai.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": translation_prompt}],
+            max_tokens=150
+        )
+        import json
+        try:
+            translations = json.loads(response.choices[0].message.content.strip())
+            localized_title = translations.get('title', localized_title)
+            localized_subtitle = translations.get('subtitle', localized_subtitle)
+            localized_summary = translations.get('summary', localized_summary)
+        except Exception:
+            pass
     # Format title slide
-    title.text = "Application Features Overview"
+    title.text = localized_title
     title.text_frame.paragraphs[0].font.size = Pt(44)
     title.text_frame.paragraphs[0].font.bold = True
     title.text_frame.paragraphs[0].font.color.rgb = theme_color_primary
-    
-    subtitle.text = "Generated from User Journey Analysis"
+
+    subtitle.text = localized_subtitle
     subtitle.text_frame.paragraphs[0].font.size = Pt(24)
     subtitle.text_frame.paragraphs[0].font.italic = True
     
@@ -50,7 +71,7 @@ def create_feature_presentation(keyframe_summaries: List[str],
     background.line.fill.background()  # No outline
     
     # Extract main features from user journey
-    features = _extract_main_features(user_journey)
+    features = _extract_main_features(user_journey, language=language)
     
     # Create feature slides
     for i, (feature, image_path) in enumerate(zip(features[:5], image_paths[:5])):
@@ -129,7 +150,7 @@ def create_feature_presentation(keyframe_summaries: List[str],
     )
     summary_title_frame = summary_title.text_frame
     summary_para = summary_title_frame.add_paragraph()
-    summary_para.text = "Key Features Summary"
+    summary_para.text = localized_summary
     summary_para.font.size = Pt(40)
     summary_para.font.bold = True
     summary_para.font.color.rgb = theme_color_primary
@@ -157,7 +178,7 @@ def create_feature_presentation(keyframe_summaries: List[str],
     prs.save(output_file)
     return output_file
 
-def _extract_main_features(user_journey: str) -> List[Dict]:
+def _extract_main_features(user_journey: str, language: str = None) -> List[Dict]:
     """
     Extracts main features from user journey text
     Returns list of dicts with 'title' and 'description'
@@ -174,6 +195,8 @@ def _extract_main_features(user_journey: str) -> List[Dict]:
     
     User Journey:
     """
+    if language and language.lower() != "english":
+        prompt += f"\nOutput ONLY in {language}."
     
     response = openai.chat.completions.create(
         model="gpt-4o",
