@@ -1,7 +1,7 @@
 import os
 import shutil
 import uuid
-from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException
+from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from preprocess.extract_audio import extract_audio
@@ -13,6 +13,69 @@ from agent.generate_persona_doc import extract_personas_usecases, select_lucrati
 from agent.create_presentation import create_feature_presentation, create_google_feature_presentation
 
 app = FastAPI()
+
+# --- CORS middleware for frontend-backend communication ---
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, restrict this!
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+import threading
+import time
+from typing import Optional
+from screen_record import record_screen_with_audio_and_camera
+
+RECORDINGS_DIR = "recordings"
+os.makedirs(RECORDINGS_DIR, exist_ok=True)
+
+# Globals for managing recording state
+RECORDING_THREAD: Optional[threading.Thread] = None
+RECORDING_ACTIVE = False
+RECORDING_OUTPUT_PATH = None
+RECORDING_STOP_REQUESTED = False
+
+@app.post("/screen_record")
+async def start_screen_record(request: Request):
+    global RECORDING_THREAD, RECORDING_ACTIVE, RECORDING_OUTPUT_PATH, RECORDING_STOP_REQUESTED
+    if RECORDING_ACTIVE:
+        return JSONResponse({"error": "A recording is already in progress."}, status_code=400)
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    duration = int(data.get("duration", 15))
+    filename = f"screen_recording_{int(time.time())}.mp4"
+    output_path = os.path.join(RECORDINGS_DIR, filename)
+    RECORDING_OUTPUT_PATH = output_path
+    RECORDING_STOP_REQUESTED = False
+    def do_record():
+        global RECORDING_ACTIVE, RECORDING_STOP_REQUESTED
+        RECORDING_ACTIVE = True
+        try:
+            record_screen_with_audio_and_camera(output_path=output_path, duration=duration)
+        except Exception as e:
+            print(f"Recording error: {e}")
+        RECORDING_ACTIVE = False
+    RECORDING_THREAD = threading.Thread(target=do_record, daemon=True)
+    RECORDING_THREAD.start()
+    # Return 200 immediately, include filename for downstream pipeline
+    return JSONResponse({"status": "recording_started", "recording_id": filename, "output_path": output_path}, status_code=200)
+
+@app.post("/screen_record/stop")
+def stop_screen_record():
+    global RECORDING_THREAD, RECORDING_ACTIVE, RECORDING_STOP_REQUESTED, RECORDING_OUTPUT_PATH
+    if not RECORDING_ACTIVE or RECORDING_THREAD is None:
+        return JSONResponse({"error": "No active recording to stop."}, status_code=400)
+    # For now, just wait for the thread to finish (simulate stop)
+    RECORDING_STOP_REQUESTED = True
+    RECORDING_THREAD.join(timeout=2)
+    RECORDING_ACTIVE = False
+    filename = os.path.basename(RECORDING_OUTPUT_PATH) if RECORDING_OUTPUT_PATH else None
+    return JSONResponse({"status": "recording_stopped", "output_path": RECORDING_OUTPUT_PATH, "recording_id": filename}, status_code=200)
 
 # Allow CORS for local frontend
 app.add_middleware(

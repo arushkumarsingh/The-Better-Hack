@@ -11,3 +11,5 @@ uploads/*
 *.pkl
 the-better-hack-7337ffd8502d.json
 cache
+recordings/
+recordings/*
