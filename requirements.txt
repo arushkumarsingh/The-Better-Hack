@@ -9,3 +9,6 @@ pillow
 python-pptx
 python-multipart
 google-api-python-client
+mss
+sounddevice
+soundfile
