@@ -7,3 +7,5 @@ uvicorn
 imagehash
 pillow
 python-pptx
+python-multipart
+google-api-python-client
