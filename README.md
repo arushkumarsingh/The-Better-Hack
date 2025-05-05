@@ -12,6 +12,13 @@ Adaptidemo is a full-stack application designed to automate the creation of user
 - **Multi-language Support:** Generate documentation in multiple languages.
 - **Downloadable Outputs:** Download generated guides and presentations in various formats.
 
+## 🎥 Demo Video
+
+Watch the demo here:
+
+[![Watch the demo](https://img.youtube.com/vi/Jk8AbWd5IuM/0.jpg)](https://www.youtube.com/watch?v=Jk8AbWd5IuM)
+
+
 ## 🛠️ Setup Instructions
 
 ### Backend (Python FastAPI)
